@@ -12,13 +12,15 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $tenant = Tenant::create([
-            'name' => 'Little Stars Kindergarten',
-            'slug' => 'little-stars',
-            'email' => 'info@littlestars.com',
-            'phone' => '+91 98765 43210',
-            'is_active' => true,
-        ]);
+        $tenant = Tenant::query()->firstOrCreate(
+            ['slug' => 'little-stars'],
+            [
+                'name' => 'Little Stars Kindergarten',
+                'email' => 'info@littlestars.com',
+                'phone' => '+91 98765 43210',
+                'is_active' => true,
+            ],
+        );
 
         $roles = collect([
             ['name' => 'super_admin', 'label' => 'Super Admin'],
@@ -28,7 +30,10 @@ class DatabaseSeeder extends Seeder
             ['name' => 'student', 'label' => 'Student'],
             ['name' => 'guest', 'label' => 'Guest'],
         ])->mapWithKeys(fn (array $role) => [
-            $role['name'] => Role::create($role),
+            $role['name'] => Role::query()->firstOrCreate(
+                ['name' => $role['name']],
+                ['label' => $role['label']],
+            ),
         ]);
 
         $users = [
@@ -40,16 +45,18 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($users as $data) {
-            $user = User::create([
-                'tenant_id' => $tenant->id,
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'phone' => '+91 90000 00000',
-                'password' => Hash::make('password'),
-                'is_active' => true,
-            ]);
+            $user = User::query()->updateOrCreate(
+                ['email' => $data['email']],
+                [
+                    'tenant_id' => $tenant->id,
+                    'name' => $data['name'],
+                    'phone' => '+91 90000 00000',
+                    'password' => Hash::make('password'),
+                    'is_active' => true,
+                ],
+            );
 
-            $user->roles()->attach($roles[$data['role']]->id);
+            $user->roles()->syncWithoutDetaching([$roles[$data['role']]->id]);
         }
 
         $this->call(CmsSeeder::class);
