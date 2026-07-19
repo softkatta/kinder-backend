@@ -22,4 +22,4 @@ php artisan serve
 - `laravel/sanctum` — API authentication (ready to use)
 - `barryvdh/laravel-dompdf` — PDF generation
 - `simplesoftwareio/simple-qrcode` — QR codes
-- `league/flysystem-aws-s3-v3` — S3 storage
+- Local disk storage (`FILESYSTEM_DISK=local`) — `storage/app/public` + `php artisan storage:link`
