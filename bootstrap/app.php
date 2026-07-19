@@ -22,6 +22,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Hostinger / SPA api-proxy: honour X-Forwarded-Host/Proto for SoftKatta domain binding.
+        $middleware->trustProxies(at: '*');
+
         $apiRateLimit = match (env('APP_ENV', 'production')) {
             'local', 'testing' => env('API_RATE_LIMIT', '1000'),
             default => env('API_RATE_LIMIT', '300'),

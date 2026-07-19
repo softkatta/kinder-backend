@@ -25,13 +25,21 @@ class LicenseService
     public function isInstalled(): bool
     {
         try {
-            // Lock file is the source of truth after a successful install — never delete it
-            // just because install_token is missing (suspend/revoke/DB decrypt failure).
+            $state = LicenseState::query()->first();
+            $hasToken = filled($state?->install_token);
+
+            if (File::exists(storage_path('app/installed')) && ! $hasToken) {
+                // Stale lock from an incomplete install — allow wizard to resume.
+                File::delete(storage_path('app/installed'));
+            }
+
+            if (! $hasToken) {
+                return false;
+            }
+
             if (File::exists(storage_path('app/installed'))) {
                 return true;
             }
-
-            $state = LicenseState::query()->first();
 
             return $state !== null && $state->installed_at !== null;
         } catch (\Throwable) {

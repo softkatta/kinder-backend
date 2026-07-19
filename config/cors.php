@@ -1,11 +1,26 @@
 <?php
 
-$frontendUrl = rtrim((string) env('FRONTEND_URL', 'http://localhost:5173'), '/');
+$localOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+];
 
-$corsOrigins = array_values(array_filter(array_map(
+$fromEnv = array_filter(array_map(
     static fn (string $origin): string => rtrim(trim($origin), '/'),
-    explode(',', (string) env('CORS_ALLOWED_ORIGINS', $frontendUrl)),
-)));
+    explode(',', (string) env('CORS_ALLOWED_ORIGINS', '')),
+));
+
+$frontend = rtrim(trim((string) env('FRONTEND_URL', '')), '/');
+
+$origins = array_values(array_unique(array_filter(array_merge(
+    $fromEnv,
+    $frontend !== '' ? [$frontend] : [],
+    env('APP_ENV', 'production') === 'local' ? $localOrigins : [],
+))));
+
+if ($origins === []) {
+    $origins = $localOrigins;
+}
 
 return [
 
@@ -16,11 +31,11 @@ return [
     |
     | Production (SoftKatta):
     |   FRONTEND_URL=https://kinder.softkatta.in
-    |   CORS_ALLOWED_ORIGINS=https://kinder.softkatta.in
+    |   CORS_ALLOWED_ORIGINS=https://kinder.softkatta.in,https://www.kinder.softkatta.in
     |   APP_URL=https://kinder-api.softkatta.in
     |
-    | supports_credentials must be true because the SPA uses withCredentials.
-    | Do not use allowed_origins=* with credentials — browsers will block it.
+    | Local SPA still uses Vite proxy (/api → backend), but CORS is required when
+    | the browser hits the API origin directly. supports_credentials must stay true.
     |
     */
 
@@ -28,9 +43,12 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => $corsOrigins !== [] ? $corsOrigins : [$frontendUrl],
+    'allowed_origins' => $origins,
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('CORS_ALLOWED_ORIGIN_PATTERNS', ''))
+    ))),
 
     'allowed_headers' => ['*'],
 
