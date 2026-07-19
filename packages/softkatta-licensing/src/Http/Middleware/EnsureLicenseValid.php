@@ -3,10 +3,12 @@
 namespace SoftKatta\Licensing\Http\Middleware;
 
 use Closure;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Request;
 use SoftKatta\Licensing\Services\LicenseService;
 use SoftKatta\Licensing\Support\LicenseErrorCode;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class EnsureLicenseValid
 {
@@ -25,8 +27,8 @@ class EnsureLicenseValid
         }
 
         try {
-            return $this->enforce($request, $next);
-        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            $denied = $this->denyIfLicenseInvalid($request);
+        } catch (DecryptException $e) {
             report($e);
 
             return response()->json([
@@ -37,7 +39,7 @@ class EnsureLicenseValid
                     'redirect' => LicenseErrorCode::frontendPath(LicenseErrorCode::INVALID_INSTALL_TOKEN),
                 ],
             ], 403);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             report($e);
 
             return response()->json([
@@ -49,12 +51,22 @@ class EnsureLicenseValid
                 ],
             ], 403);
         }
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        // Controller/app errors must stay real HTTP status codes — not remapped as license 403.
+        return $next($request);
     }
 
-    protected function enforce(Request $request, Closure $next): Response
+    /**
+     * @return Response|null Null when the request may proceed.
+     */
+    protected function denyIfLicenseInvalid(Request $request): ?Response
     {
         if (! $this->license->isInstalled()) {
-            return $next($request);
+            return null;
         }
 
         if (! $this->license->isCompanyApiConfigured()) {
@@ -68,19 +80,21 @@ class EnsureLicenseValid
             ], 403);
         }
 
+        // After SoftKatta suspend/revoke, block public marketing APIs too.
+        // Always force SoftKatta when hard-blocked so Admin Activate restores on the next request.
         if ($this->license->isHardBlocked()) {
             $code = $this->license->state()->last_error_code ?: LicenseErrorCode::INVALID_LICENSE;
 
             $result = $this->license->verify(true);
             if ($result['ok'] ?? false) {
-                return $next($request);
+                return null;
             }
             $code = $result['error_code'] ?? $code;
 
             if ($code === LicenseErrorCode::INVALID_INSTALL_TOKEN) {
                 $reactivated = $this->license->attemptAutoReactivate();
                 if ($reactivated['ok'] ?? false) {
-                    return $next($request);
+                    return null;
                 }
                 $code = $reactivated['error_code'] ?? $code;
             }
@@ -95,6 +109,8 @@ class EnsureLicenseValid
             ], 403);
         }
 
+        // Public marketing GETs always re-check SoftKatta when interval is 0 (default)
+        // so Admin Suspend stops the site on the next page load.
         $isPublicGet = false;
         if ($request->isMethod('get')) {
             foreach ((array) config('softkatta.license_public_get_paths', []) as $pattern) {
@@ -108,17 +124,17 @@ class EnsureLicenseValid
         $force = $request->is('api/v1/auth/login')
             || $request->is('api/v1/license/verify')
             || (bool) $request->bearerToken()
-            || $request->is('api/v1/auth/*');
+            || $request->is('api/v1/auth/*')
+            || $isPublicGet;
 
         $needsCheck = $force
-            || $isPublicGet
             || $request->isMethod('post')
             || $request->isMethod('put')
             || $request->isMethod('patch')
             || $request->isMethod('delete');
 
         if (! $needsCheck) {
-            return $next($request);
+            return null;
         }
 
         if (! $this->license->state()->install_token) {
@@ -143,6 +159,6 @@ class EnsureLicenseValid
             ], 403);
         }
 
-        return $next($request);
+        return null;
     }
 }

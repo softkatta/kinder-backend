@@ -11,6 +11,7 @@ return [
     'verify_interval_hours' => (int) env('SOFTKATTA_VERIFY_INTERVAL_HOURS', 0),
     // Keep in sync with hours=0 (always re-check SoftKatta so Suspend is fast).
     'verify_interval_minutes' => (int) env('SOFTKATTA_VERIFY_INTERVAL_MINUTES', 0),
+    'verify_coalesce_seconds' => (int) env('SOFTKATTA_VERIFY_COALESCE_SECONDS', 5),
     'timestamp_skew_seconds' => (int) env('SOFTKATTA_TIMESTAMP_SKEW', 300),
     'require_https' => (bool) env('SOFTKATTA_REQUIRE_HTTPS', true),
     'enabled' => (bool) env('SOFTKATTA_LICENSING_ENABLED', true),

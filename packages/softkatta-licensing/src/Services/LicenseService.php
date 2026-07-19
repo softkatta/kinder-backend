@@ -189,18 +189,21 @@ class LicenseService
             }
         }
 
-        // 0 = always hit SoftKatta (fast Suspend). Default 1 minute for public traffic.
-        $intervalMinutes = (int) config('softkatta.verify_interval_minutes', 1);
+        // 0 = always prefer SoftKatta for Admin Suspend/Activate. Still coalesce parallel
+        // public GETs onto one SoftKatta call for a few seconds (avoids 429→Invalid).
+        $intervalMinutes = (int) config('softkatta.verify_interval_minutes', 0);
+        $coalesceSeconds = max(0, (int) config('softkatta.verify_coalesce_seconds', 5));
         $version = (string) config('softkatta.product_version');
         $versionChanged = $state->product_version_at_verify && $state->product_version_at_verify !== $version;
 
         if (
-            ! $force
-            && $intervalMinutes > 0
-            && ! $versionChanged
+            ! $versionChanged
             && $state->last_verified_at
             && $state->last_error_code === null
-            && $state->last_verified_at->gt(now()->subMinutes($intervalMinutes))
+            && (
+                (! $force && $intervalMinutes > 0 && $state->last_verified_at->gt(now()->subMinutes($intervalMinutes)))
+                || ($coalesceSeconds > 0 && $state->last_verified_at->gt(now()->subSeconds($coalesceSeconds)))
+            )
         ) {
             return [
                 'ok' => true,

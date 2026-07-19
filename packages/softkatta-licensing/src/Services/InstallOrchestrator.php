@@ -26,8 +26,20 @@ class InstallOrchestrator
             $installed = $this->license->isInstalled();
             $state = \SoftKatta\Licensing\Models\LicenseState::query()->first();
             $hasToken = filled($state?->install_token);
-            $hardBlocked = \SoftKatta\Licensing\Support\LicenseErrorCode::isHardFailure($state?->last_error_code);
             $companyConfigured = $this->isCompanyApiConfigured();
+
+            // status() is license-exempt — force SoftKatta when Admin may have Activated/Suspended.
+            if (
+                $installed
+                && $hasToken
+                && $companyConfigured
+                && \SoftKatta\Licensing\Support\LicenseErrorCode::isRemotelyRecoverable($state?->last_error_code)
+            ) {
+                $this->license->verify(true);
+                $state = \SoftKatta\Licensing\Models\LicenseState::query()->first();
+            }
+
+            $hardBlocked = \SoftKatta\Licensing\Support\LicenseErrorCode::isHardFailure($state?->last_error_code);
             // Local install_token alone is not enough — SoftKatta Product Integration credentials must exist.
             $hasLicense = $hasToken && ! $hardBlocked && $companyConfigured;
             if ($installed && $hasToken && ! $companyConfigured) {
@@ -62,11 +74,16 @@ class InstallOrchestrator
             'company_api_configured' => $companyConfigured ?? $this->isCompanyApiConfigured(),
             'company_api' => [
                 'company_api_url' => (string) config('softkatta.company_api_url'),
-                'public_api_key' => $this->maskSecret($publicKey),
+                // Public integration key is designed to be copied into the product — prefill Restore form.
+                'public_api_key' => $publicKey,
                 'api_secret_set' => $secret !== '',
                 'product_slug' => $this->resolveProductSlug(),
                 'product_version' => (string) config('softkatta.product_version'),
-                'app_url' => (string) config('app.url'),
+                'app_url' => (string) (
+                    config('softkatta.frontend_url')
+                    ?: config('app.frontend_url')
+                    ?: config('app.url')
+                ),
                 'require_https' => (bool) config('softkatta.require_https'),
                 'offline_grace_days' => (int) config('softkatta.offline_grace_days'),
                 'verify_interval_hours' => (int) config('softkatta.verify_interval_hours'),
@@ -365,6 +382,16 @@ class InstallOrchestrator
         }
         if ($apiSecret === '') {
             throw new RuntimeException('SoftKatta API secret is required.');
+        }
+        if (! preg_match('/^sk_pub_[a-z0-9]+$/i', $publicApiKey)) {
+            throw new RuntimeException(
+                'Public API Key must look like sk_pub_... from SoftKatta Admin → Product Integrations. Do not enter your SoftKatta login email.'
+            );
+        }
+        if (! preg_match('/^sk_sec_[a-z0-9]+$/i', $apiSecret)) {
+            throw new RuntimeException(
+                'API Secret must look like sk_sec_... from SoftKatta Admin → Product Integrations → Reveal. Do not enter your SoftKatta password.'
+            );
         }
         if ($productSlug === '') {
             throw new RuntimeException('Product slug is required.');

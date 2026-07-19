@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
 use SoftKatta\Licensing\Support\HmacSigner;
+use SoftKatta\Licensing\Support\LicenseErrorCode;
 
 class CompanyApiClient
 {
@@ -132,9 +133,9 @@ class CompanyApiClient
         }
 
         try {
-            $pending = Http::withHeaders($headers)->timeout(20)->withBody($rawBody !== '' ? $rawBody : '{}', 'application/json');
+            $pending = Http::withHeaders($headers)->timeout(8)->connectTimeout(5)->withBody($rawBody !== '' ? $rawBody : '{}', 'application/json');
             $response = match (strtoupper($method)) {
-                'GET' => Http::withHeaders($headers)->timeout(20)->get($url),
+                'GET' => Http::withHeaders($headers)->timeout(8)->connectTimeout(5)->get($url),
                 'POST' => $pending->send('POST', $url),
                 default => throw new RuntimeException('Unsupported method'),
             };
@@ -147,9 +148,36 @@ class CompanyApiClient
                 'data' => null,
                 'status' => 0,
             ];
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [
+                'ok' => false,
+                'unavailable' => true,
+                'error_code' => 'COMPANY_API_UNAVAILABLE',
+                'message' => 'Company API request failed: '.$e->getMessage(),
+                'data' => null,
+                'status' => 0,
+            ];
         }
 
         $json = $response->json() ?? [];
+        $status = $response->status();
+
+        // SoftKatta Company routes are throttled. Parallel public GETs must not record 429 as INVALID_LICENSE.
+        if ($status === 429 || $response->serverError()) {
+            return [
+                'ok' => false,
+                'unavailable' => true,
+                'error_code' => LicenseErrorCode::COMPANY_API_UNAVAILABLE,
+                'message' => $status === 429
+                    ? 'SoftKatta Company API rate limit reached. Retrying shortly.'
+                    : ('SoftKatta Company API error HTTP '.$status),
+                'data' => null,
+                'status' => $status,
+            ];
+        }
+
         $errorCode = $json['error_code'] ?? ($response->successful() ? null : 'INVALID_LICENSE');
         $message = $json['message'] ?? $response->body();
 
@@ -163,7 +191,7 @@ class CompanyApiClient
             'error_code' => $errorCode,
             'message' => $message,
             'data' => $json['data'] ?? null,
-            'status' => $response->status(),
+            'status' => $status,
         ];
     }
 
