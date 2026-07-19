@@ -29,13 +29,13 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $loginId = trim($credentials['email']);
-        $user = User::with('roles')->where('email', $loginId)->first();
+        $loginId = strtolower(trim($credentials['email']));
+        $user = User::with('roles')->whereRaw('LOWER(email) = ?', [$loginId])->first();
 
         if (! $user) {
             $guest = Guest::query()
-                ->where('guest_code', $loginId)
-                ->orWhere('qr_token', $loginId)
+                ->where('guest_code', $credentials['email'])
+                ->orWhere('qr_token', $credentials['email'])
                 ->first();
             if ($guest?->user_id) {
                 $user = User::with('roles')->find($guest->user_id);

@@ -76,6 +76,9 @@ class InstallController extends Controller
             'password' => ['required', 'string', 'min:8'],
         ]);
 
+        $data['email'] = strtolower(trim($data['email']));
+        $data['name'] = trim($data['name']);
+
         try {
             $user = $this->install->createAdmin($data);
         } catch (\Throwable $e) {
@@ -86,7 +89,8 @@ class InstallController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-        ], 'Administrator account created.');
+            'login_hint' => 'Sign in at /login with this email and the password you just set.',
+        ], 'Administrator account created. Use this email and password to log in after install.');
     }
 
     public function activate(Request $request): JsonResponse
