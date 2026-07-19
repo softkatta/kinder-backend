@@ -33,6 +33,11 @@ class ServerFingerprintService
             return strtolower($this->stripPort($bound));
         }
 
+        $originHost = $this->hostFromRequestOrigin();
+        if ($originHost !== null && ! $this->isLoopbackHost($originHost)) {
+            return strtolower($this->stripPort($originHost));
+        }
+
         $frontendHost = $this->hostFromUrl((string) (
             config('softkatta.frontend_url')
             ?: env('FRONTEND_URL', '')
@@ -46,14 +51,7 @@ class ServerFingerprintService
         $appUrlHost = $this->hostFromUrl((string) config('app.url'));
 
         if ($requestHost !== '' && ! $this->isLoopbackHost($requestHost)) {
-            $request = strtolower($this->stripPort($requestHost));
-            $configured = $appUrlHost !== null ? strtolower($this->stripPort($appUrlHost)) : null;
-
-            if ($configured === null || $this->isLoopbackHost($configured) || $configured === $request) {
-                return $request;
-            }
-
-            return $request;
+            return strtolower($this->stripPort($requestHost));
         }
 
         if ($appUrlHost !== null && ! $this->isLoopbackHost($appUrlHost)) {
@@ -69,6 +67,23 @@ class ServerFingerprintService
         }
 
         return 'localhost';
+    }
+
+    private function hostFromRequestOrigin(): ?string
+    {
+        $request = request();
+        foreach (['Origin', 'Referer'] as $header) {
+            $value = trim((string) $request->header($header, ''));
+            if ($value === '') {
+                continue;
+            }
+            $host = $this->hostFromUrl($value);
+            if ($host !== null && $host !== '') {
+                return $host;
+            }
+        }
+
+        return null;
     }
 
     private function hostFromUrl(string $configured): ?string
