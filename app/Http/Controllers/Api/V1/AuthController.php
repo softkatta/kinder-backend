@@ -43,9 +43,7 @@ class AuthController extends Controller
         }
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Invalid email or password.'],
-            ]);
+            return ApiResponse::error('Invalid email or password.', 401);
         }
 
         if (! $user->is_active) {
