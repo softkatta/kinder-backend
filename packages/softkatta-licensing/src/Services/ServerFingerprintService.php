@@ -28,11 +28,23 @@ class ServerFingerprintService
 
     public function currentDomain(): string
     {
-        $requestHost = (string) request()->getHost();
-        $appUrlHost = $this->hostFromAppUrl();
+        $bound = $this->hostFromUrl((string) config('softkatta.bound_domain', ''));
+        if ($bound !== null && ! $this->isLoopbackHost($bound)) {
+            return strtolower($this->stripPort($bound));
+        }
 
-        // Prefer the live public request host when it differs from APP_URL.
-        // Prevents Study Point APP_URL from poisoning a Kindergarten install (and vice versa).
+        $frontendHost = $this->hostFromUrl((string) (
+            config('softkatta.frontend_url')
+            ?: env('FRONTEND_URL', '')
+            ?: config('app.frontend_url', '')
+        ));
+        if ($frontendHost !== null && ! $this->isLoopbackHost($frontendHost)) {
+            return strtolower($this->stripPort($frontendHost));
+        }
+
+        $requestHost = (string) request()->getHost();
+        $appUrlHost = $this->hostFromUrl((string) config('app.url'));
+
         if ($requestHost !== '' && ! $this->isLoopbackHost($requestHost)) {
             $request = strtolower($this->stripPort($requestHost));
             $configured = $appUrlHost !== null ? strtolower($this->stripPort($appUrlHost)) : null;
@@ -41,7 +53,6 @@ class ServerFingerprintService
                 return $request;
             }
 
-            // Different public hosts: request wins for activate/verify against SoftKatta Admin domains.
             return $request;
         }
 
@@ -60,11 +71,15 @@ class ServerFingerprintService
         return 'localhost';
     }
 
-    private function hostFromAppUrl(): ?string
+    private function hostFromUrl(string $configured): ?string
     {
-        $configured = (string) config('app.url');
+        $configured = trim($configured);
         if ($configured === '') {
             return null;
+        }
+
+        if (! str_contains($configured, '://')) {
+            $configured = 'https://'.$configured;
         }
 
         $host = parse_url($configured, PHP_URL_HOST);
