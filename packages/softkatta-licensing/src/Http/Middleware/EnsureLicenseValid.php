@@ -24,6 +24,24 @@ class EnsureLicenseValid
             }
         }
 
+        try {
+            return $this->enforce($request, $next);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'License check failed. Try Restore access or contact SoftKatta support.',
+                'error_code' => LicenseErrorCode::INVALID_LICENSE,
+                'data' => [
+                    'redirect' => LicenseErrorCode::frontendPath(LicenseErrorCode::INVALID_LICENSE),
+                ],
+            ], 403);
+        }
+    }
+
+    protected function enforce(Request $request, Closure $next): Response
+    {
         if (! $this->license->isInstalled()) {
             return $next($request);
         }
@@ -39,8 +57,6 @@ class EnsureLicenseValid
             ], 403);
         }
 
-        // After SoftKatta suspend/revoke, block public marketing APIs too.
-        // Always re-check SoftKatta — Admin Activate may revive sessions or clear suspend.
         if ($this->license->isHardBlocked()) {
             $code = $this->license->state()->last_error_code ?: LicenseErrorCode::INVALID_LICENSE;
 
@@ -68,7 +84,6 @@ class EnsureLicenseValid
             ], 403);
         }
 
-        // Public marketing GETs still require a live SoftKatta check (short cache) so Suspend stops the site.
         $isPublicGet = false;
         if ($request->isMethod('get')) {
             foreach ((array) config('softkatta.license_public_get_paths', []) as $pattern) {
@@ -104,7 +119,6 @@ class EnsureLicenseValid
             ], 403);
         }
 
-        // Authenticated / login always online; public uses short cache (verify_interval_minutes).
         $result = $this->license->verify($force);
 
         if (! ($result['ok'] ?? false)) {
