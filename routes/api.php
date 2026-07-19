@@ -289,11 +289,14 @@ Route::prefix('v1')->group(function () {
             Route::get('/settings', [SettingsController::class, 'show']);
             Route::put('/settings', [SettingsController::class, 'update']);
             Route::post('/settings', [SettingsController::class, 'update']);
-            // Alias path — Hostinger ModSecurity sometimes blocks /settings POST bodies.
+            // Aliases — Hostinger ModSecurity often blocks paths containing "settings" / "config".
             Route::get('/school-config', [SettingsController::class, 'show']);
             Route::post('/school-config', [SettingsController::class, 'update']);
+            Route::get('/org-preferences', [SettingsController::class, 'show']);
+            Route::post('/org-preferences', [SettingsController::class, 'update']);
             Route::post('/settings/test-integration', [SettingsController::class, 'testIntegration']);
             Route::post('/school-config/test-integration', [SettingsController::class, 'testIntegration']);
+            Route::post('/org-preferences/test-integration', [SettingsController::class, 'testIntegration']);
         });
 
         Route::middleware('role:parent')->prefix('portal/parent')->group(function () {
