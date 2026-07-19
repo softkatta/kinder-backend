@@ -291,13 +291,17 @@ Route::prefix('v1')->group(function () {
             Route::post('/settings', [SettingsController::class, 'update']);
             // Aliases — Hostinger ModSecurity often blocks paths containing "settings" / "config" / "preferences".
             Route::get('/school-config', [SettingsController::class, 'show']);
+            Route::put('/school-config', [SettingsController::class, 'update']);
             Route::post('/school-config', [SettingsController::class, 'update']);
             Route::get('/org-preferences', [SettingsController::class, 'show']);
+            Route::put('/org-preferences', [SettingsController::class, 'update']);
             Route::post('/org-preferences', [SettingsController::class, 'update']);
             Route::get('/org_preferences', [SettingsController::class, 'show']);
+            Route::put('/org_preferences', [SettingsController::class, 'update']);
             Route::post('/org_preferences', [SettingsController::class, 'update']);
-            // Safest alias for Hostinger WAF (prefer this from the SPA).
+            // Prefer PUT /erp/school — Hostinger WAF often flags POST + settings keywords.
             Route::get('/erp/school', [SettingsController::class, 'show']);
+            Route::put('/erp/school', [SettingsController::class, 'update']);
             Route::post('/erp/school', [SettingsController::class, 'update']);
             Route::post('/settings/test-integration', [SettingsController::class, 'testIntegration']);
             Route::post('/school-config/test-integration', [SettingsController::class, 'testIntegration']);
