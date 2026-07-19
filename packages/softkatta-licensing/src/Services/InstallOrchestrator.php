@@ -155,6 +155,11 @@ class InstallOrchestrator
                 'ok' => is_writable(base_path('.env')) || is_writable(base_path()),
                 'value' => base_path('.env'),
             ],
+            'app_key' => [
+                'label' => 'APP_KEY set',
+                'ok' => filled(config('app.key')),
+                'value' => filled(config('app.key')) ? 'set' : 'missing — run: php artisan key:generate',
+            ],
         ];
 
         return [

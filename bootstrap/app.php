@@ -4,6 +4,7 @@ use SoftKatta\Licensing\Http\Middleware\EnsureInstalled;
 use SoftKatta\Licensing\Http\Middleware\EnsureLicenseValid;
 use SoftKatta\Licensing\Http\Middleware\EnsureNotInstalled;
 use SoftKatta\Licensing\SoftKattaLicensingServiceProvider;
+use App\Http\Middleware\EnsureCorsHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         };
         $middleware->throttleApi("{$apiRateLimit},1");
         $middleware->api(prepend: [
+            EnsureCorsHeaders::class,
             EnsureInstalled::class,
             EnsureLicenseValid::class,
         ]);

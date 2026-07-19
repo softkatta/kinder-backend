@@ -288,6 +288,8 @@ Route::prefix('v1')->group(function () {
 
             Route::get('/settings', [SettingsController::class, 'show']);
             Route::put('/settings', [SettingsController::class, 'update']);
+            // POST alias — some Hostinger/WAF setups strip CORS on blocked PUT bodies.
+            Route::post('/settings', [SettingsController::class, 'update']);
             Route::post('/settings/test-integration', [SettingsController::class, 'testIntegration']);
         });
 

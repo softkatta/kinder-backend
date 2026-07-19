@@ -8,7 +8,6 @@ use App\Models\User;
 use App\Services\Audit\AuditLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use SoftKatta\Licensing\Services\LicenseService;
 
@@ -59,10 +58,12 @@ class UserController extends Controller
         ]);
 
         $user = User::create([
+            'tenant_id' => $request->user()?->tenant_id,
             'name' => $data['name'],
-            'email' => $data['email'],
+            'email' => strtolower(trim($data['email'])),
             'phone' => $data['phone'] ?? null,
-            'password' => Hash::make($data['password']),
+            // Plain password — User model `hashed` cast hashes once.
+            'password' => $data['password'],
             'is_active' => $data['is_active'] ?? true,
         ]);
 
@@ -99,10 +100,11 @@ class UserController extends Controller
 
         $user->update(array_filter([
             'name' => $data['name'] ?? null,
-            'email' => $data['email'] ?? null,
+            'email' => isset($data['email']) ? strtolower(trim($data['email'])) : null,
             'phone' => $data['phone'] ?? null,
             'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : null,
-            'password' => ! empty($data['password']) ? Hash::make($data['password']) : null,
+            // Plain password — User model `hashed` cast hashes once.
+            'password' => ! empty($data['password']) ? $data['password'] : null,
         ], fn ($v) => $v !== null));
 
         if (array_key_exists('roles', $data)) {

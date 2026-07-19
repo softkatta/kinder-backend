@@ -22,31 +22,23 @@ class LicenseService
         return (bool) config('softkatta.enabled', true);
     }
 
-  public function isInstalled(): bool
-  {
+    public function isInstalled(): bool
+    {
         try {
-            $state = LicenseState::query()->first();
-            $hasToken = filled($state?->install_token);
-
-            if (File::exists(storage_path('app/installed')) && ! $hasToken) {
-                // Stale lock from an incomplete install — allow wizard to resume.
-                File::delete(storage_path('app/installed'));
-            }
-
-            if (! $hasToken) {
-                return false;
-            }
-
+            // Lock file is the source of truth after a successful install — never delete it
+            // just because install_token is missing (suspend/revoke/DB decrypt failure).
             if (File::exists(storage_path('app/installed'))) {
                 return true;
             }
+
+            $state = LicenseState::query()->first();
 
             return $state !== null && $state->installed_at !== null;
         } catch (\Throwable) {
             // DB down: if the install lock file exists, treat as installed — never reopen the wizard.
             return File::exists(storage_path('app/installed'));
         }
-  }
+    }
 
     public function state(): LicenseState
     {
