@@ -24,6 +24,7 @@ return [
         'up',
         'api/v1/license/entitlements',
         'api/v1/license/activate',
+        'api/v1/license/company-api',
         'api/v1/webhooks/*',
     ],
 

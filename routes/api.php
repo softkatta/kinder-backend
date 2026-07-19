@@ -70,6 +70,7 @@ Route::prefix('v1')->group(function () {
     Route::get('license/entitlements', [LicenseController::class, 'entitlements']);
     Route::post('license/verify', [LicenseController::class, 'verify']);
     Route::post('license/activate', [InstallController::class, 'activate']);
+    Route::post('license/company-api', [InstallController::class, 'companyApi'])->middleware('throttle:30,1');
 
     Route::post('/admissions', [AdmissionController::class, 'store']);
 
