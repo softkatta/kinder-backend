@@ -20,7 +20,10 @@ class CheckRole
         $user->loadMissing('roles');
 
         if (! $user->hasAnyRole($roles)) {
-            return ApiResponse::error('Forbidden', 403);
+            return ApiResponse::error(
+                'Forbidden: your account needs one of these roles: '.implode(', ', $roles).'.',
+                403,
+            );
         }
 
         return $next($request);
