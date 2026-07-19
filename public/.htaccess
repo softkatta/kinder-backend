@@ -1,3 +1,9 @@
+# Hostinger ModSecurity: drop rules that false-flag JSON API saves (settings/profile body).
+<IfModule mod_security.c>
+    SecRuleRemoveById 400011
+    SecRuleRemoveById 400012
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
