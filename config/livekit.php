@@ -6,7 +6,8 @@ return [
   | LiveKit WebRTC (built-in browser camera streaming)
   |--------------------------------------------------------------------------
   | Video/audio flows through LiveKit — NOT stored on Laravel.
-  | Run: docker compose -f docker-compose.livekit.yml up -d
+  | From backend/: docker compose -f docker-compose.livekit.yml up -d
+  | Or: powershell -File scripts/start-livekit.ps1
   */
   'url' => env('LIVEKIT_URL', ''),
   'api_key' => env('LIVEKIT_API_KEY', 'devkey'),

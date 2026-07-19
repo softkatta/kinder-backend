@@ -436,7 +436,7 @@ class LiveStreamController extends Controller
 
         if (! $this->liveKit->isReachable()) {
             return ApiResponse::error(
-                'LiveKit server is not running on '.config('livekit.url').'. Start it with: npm run dev:livekit (or run scripts/start-livekit.ps1 in a separate terminal).',
+                'LiveKit server is not running on '.config('livekit.url').'. From backend/: run powershell -File scripts/start-livekit.ps1 (or docker compose -f docker-compose.livekit.yml up -d).',
                 503,
             );
         }

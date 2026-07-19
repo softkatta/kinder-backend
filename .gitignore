@@ -22,3 +22,8 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# LiveKit binary (downloaded by scripts/start-livekit.ps1)
+/tools/livekit-server.exe
+/tools/*.zip
+/tools/livekit-server.version
