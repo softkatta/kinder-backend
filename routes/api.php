@@ -288,9 +288,12 @@ Route::prefix('v1')->group(function () {
 
             Route::get('/settings', [SettingsController::class, 'show']);
             Route::put('/settings', [SettingsController::class, 'update']);
-            // POST alias — some Hostinger/WAF setups strip CORS on blocked PUT bodies.
             Route::post('/settings', [SettingsController::class, 'update']);
+            // Alias path — Hostinger ModSecurity sometimes blocks /settings POST bodies.
+            Route::get('/school-config', [SettingsController::class, 'show']);
+            Route::post('/school-config', [SettingsController::class, 'update']);
             Route::post('/settings/test-integration', [SettingsController::class, 'testIntegration']);
+            Route::post('/school-config/test-integration', [SettingsController::class, 'testIntegration']);
         });
 
         Route::middleware('role:parent')->prefix('portal/parent')->group(function () {

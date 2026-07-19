@@ -23,3 +23,14 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# CORS for SPA (kinder.softkatta.in). "always" applies even on Apache/WAF error pages when possible.
+<IfModule mod_headers.c>
+    SetEnvIf Origin "^https://kinder\.softkatta\.in$" CORS_OK=1
+    Header always set Access-Control-Allow-Origin "https://kinder.softkatta.in" env=CORS_OK
+    Header always set Access-Control-Allow-Credentials "true" env=CORS_OK
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" env=CORS_OK
+    Header always set Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Tenant-ID, X-Requested-With, X-XSRF-TOKEN" env=CORS_OK
+    Header always set Access-Control-Max-Age "86400" env=CORS_OK
+    Header always set Vary "Origin" env=CORS_OK
+</IfModule>

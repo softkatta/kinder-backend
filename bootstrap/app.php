@@ -27,8 +27,9 @@ return Application::configure(basePath: dirname(__DIR__))
             default => env('API_RATE_LIMIT', '300'),
         };
         $middleware->throttleApi("{$apiRateLimit},1");
+        // Global so CORS headers attach even when API middleware short-circuits.
+        $middleware->prepend(EnsureCorsHeaders::class);
         $middleware->api(prepend: [
-            EnsureCorsHeaders::class,
             EnsureInstalled::class,
             EnsureLicenseValid::class,
         ]);
@@ -61,5 +62,28 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => 'Resource not found',
                 ], 404);
             }
+        });
+
+        // Ensure API error JSON still includes CORS for the SoftKatta SPA origin.
+        $exceptions->respond(function ($response, $e, Request $request) {
+            if (! $request->is('api/*')) {
+                return $response;
+            }
+            $origin = rtrim((string) $request->headers->get('Origin', ''), '/');
+            $allowed = array_map(
+                static fn ($o) => rtrim(trim((string) $o), '/'),
+                (array) config('cors.allowed_origins', []),
+            );
+            $frontend = rtrim((string) config('app.frontend_url'), '/');
+            if ($frontend !== '') {
+                $allowed[] = $frontend;
+            }
+            if ($origin !== '' && in_array($origin, $allowed, true) && ! $response->headers->has('Access-Control-Allow-Origin')) {
+                $response->headers->set('Access-Control-Allow-Origin', $origin);
+                $response->headers->set('Access-Control-Allow-Credentials', 'true');
+                $response->headers->set('Vary', 'Origin');
+            }
+
+            return $response;
         });
     })->create();
