@@ -7,18 +7,22 @@ use App\Http\Responses\ApiResponse;
 use App\Models\CmsItem;
 use App\Models\LiveStream;
 use App\Models\LiveStreamCamera;
+use App\Services\LiveStream\LiveKitService;
 use App\Services\LiveStream\LiveStreamService;
 use App\Services\LiveStream\LiveStreamUrlValidator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class LiveStreamController extends Controller
 {
     public function __construct(
         private readonly LiveStreamService $streams,
         private readonly LiveStreamUrlValidator $urlValidator,
+        private readonly LiveKitService $liveKit,
     ) {}
 
     public function index(): JsonResponse
@@ -138,8 +142,8 @@ class LiveStreamController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'location' => ['nullable', 'string', 'max:255'],
-            'stream_type' => ['required', Rule::in(['hls', 'youtube', 'vimeo', 'embed', 'facebook', 'rtmp'])],
-            'stream_url' => ['required', 'string', 'max:2048'],
+            'stream_type' => ['required', Rule::in(['hls', 'youtube', 'vimeo', 'embed', 'facebook', 'rtmp', 'builtin_camera'])],
+            'stream_url' => ['nullable', 'string', 'max:2048'],
             'is_enabled' => ['sometimes', 'boolean'],
         ]);
 
@@ -148,7 +152,7 @@ class LiveStreamController extends Controller
         $order = (int) $liveStream->cameras()->max('display_order') + 1;
         $camera = $liveStream->cameras()->create([
             ...$data,
-            'stream_url' => $data['stream_url'],
+            'stream_url' => $data['stream_url'] ?? ($data['stream_type'] === 'builtin_camera' ? 'builtin://camera' : ''),
             'display_order' => $order,
             'is_enabled' => $data['is_enabled'] ?? true,
         ]);
@@ -169,8 +173,8 @@ class LiveStreamController extends Controller
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
             'location' => ['nullable', 'string', 'max:255'],
-            'stream_type' => ['sometimes', Rule::in(['hls', 'youtube', 'vimeo', 'embed', 'facebook', 'rtmp'])],
-            'stream_url' => ['sometimes', 'string', 'max:2048'],
+            'stream_type' => ['sometimes', Rule::in(['hls', 'youtube', 'vimeo', 'embed', 'facebook', 'rtmp', 'builtin_camera'])],
+            'stream_url' => ['sometimes', 'nullable', 'string', 'max:2048'],
             'is_enabled' => ['sometimes', 'boolean'],
         ]);
 
@@ -336,13 +340,62 @@ class LiveStreamController extends Controller
         return ApiResponse::success($this->streams->toWatchPayload($liveStream));
     }
 
+    public function publisherEvents(): JsonResponse
+    {
+        return ApiResponse::success($this->streams->publisherEventsForUser());
+    }
+
+    public function joinCamera(Request $request, LiveStream $liveStream): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:255'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'device_name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $camera = $this->streams->joinCamera($liveStream, $request->user(), $data);
+
+        return ApiResponse::success(
+            $this->streams->toPublisherJoinPayload($liveStream->fresh(), $camera),
+            'Camera session started',
+            201,
+        );
+    }
+
+    public function updateCameraSession(Request $request, LiveStream $liveStream, LiveStreamCamera $camera): JsonResponse
+    {
+        $this->assertCameraBelongsToStream($liveStream, $camera);
+
+        $data = $request->validate([
+            'connection_status' => ['sometimes', Rule::in(LiveStreamCamera::connectionStatuses())],
+            'device_name' => ['nullable', 'string', 'max:255'],
+            'battery_level' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'signal_strength' => ['nullable', 'integer', 'min:0', 'max:100'],
+        ]);
+
+        $camera = $this->streams->updateCameraSession($liveStream, $camera, $request->user(), $data);
+
+        return ApiResponse::success(
+            $this->streams->toPublisherJoinPayload($liveStream->fresh(), $camera),
+            'Session updated',
+        );
+    }
+
     public function disconnectCamera(Request $request, LiveStream $liveStream, LiveStreamCamera $camera): JsonResponse
     {
         $this->assertCameraBelongsToStream($liveStream, $camera);
 
-        $this->streams->disconnectCamera($liveStream, $camera, $request->user(), adminForce: true);
+        $adminForce = $request->user()->hasAnyRole(LiveStreamService::adminRoles());
+        $camera = $this->streams->disconnectCamera($liveStream, $camera, $request->user(), $adminForce);
 
-        return ApiResponse::success($this->streams->toStaffPayload($liveStream->fresh()), 'Camera disconnected');
+        if ($adminForce) {
+            return ApiResponse::success($this->streams->toStaffPayload($liveStream->fresh()), 'Camera disconnected');
+        }
+
+        return ApiResponse::success(
+            $this->streams->toPublisherJoinPayload($liveStream->fresh(), $camera),
+            'Camera disconnected',
+        );
     }
 
     public function muteCamera(Request $request, LiveStream $liveStream, LiveStreamCamera $camera): JsonResponse
@@ -356,6 +409,99 @@ class LiveStreamController extends Controller
         $camera = $this->streams->setCameraAudioMuted($liveStream, $camera, (bool) $data['muted']);
 
         return ApiResponse::success($this->streams->toStaffPayload($liveStream->fresh()), $data['muted'] ? 'Audio muted' : 'Audio unmuted');
+    }
+
+    public function livekitConfig(): JsonResponse
+    {
+        return ApiResponse::success($this->liveKit->publicConfig());
+    }
+
+    public function webrtcToken(Request $request, LiveStream $liveStream): JsonResponse
+    {
+        $data = $request->validate([
+            'camera_id' => ['nullable', 'integer'],
+            'role' => ['nullable', Rule::in(['publisher', 'viewer'])],
+        ]);
+
+        $user = $request->user();
+        $user?->loadMissing('roles');
+        $role = $data['role'] ?? 'viewer';
+
+        if (! $this->liveKit->isConfigured()) {
+            return ApiResponse::error(
+                'Built-in camera streaming is not configured. Enable LiveKit in Admin → Settings → LiveKit (URL, API key, secret), then start the LiveKit server.',
+                503,
+            );
+        }
+
+        if (! $this->liveKit->isReachable()) {
+            return ApiResponse::error(
+                'LiveKit server is not running on '.config('livekit.url').'. From backend/: run powershell -File scripts/start-livekit.ps1 (or docker compose -f docker-compose.livekit.yml up -d).',
+                503,
+            );
+        }
+
+        if ($role === 'publisher') {
+            if (! $user || ! $user->hasAnyRole(LiveStreamService::staffRoles())) {
+                return ApiResponse::error('Forbidden', 403);
+            }
+
+            $cameraId = (int) ($data['camera_id'] ?? $liveStream->active_camera_id);
+            $camera = $liveStream->cameras()->whereKey($cameraId)->first();
+            if (! $camera || $camera->stream_type !== LiveStreamCamera::TYPE_BUILTIN) {
+                return ApiResponse::error('Built-in camera not found', 404);
+            }
+
+            if ($camera->publisher_user_id && ! $user->hasAnyRole(LiveStreamService::adminRoles())) {
+                if ((int) $camera->publisher_user_id !== (int) $user->id) {
+                    return ApiResponse::error('You can only publish from your own camera', 403);
+                }
+            }
+
+            $token = $this->liveKit->createPublisherToken($liveStream, $camera, $user->name);
+
+            return ApiResponse::success([
+                'token' => $token,
+                'url' => config('livekit.url'),
+                'room_name' => $this->liveKit->roomName($liveStream),
+                'participant_identity' => $this->liveKit->participantIdentity($camera),
+            ]);
+        }
+
+        if ($liveStream->visibility === LiveStream::VISIBILITY_PARENTS_ONLY) {
+            if (! $user || ! $user->hasAnyRole(LiveStreamService::liveAccessRoles())) {
+                return ApiResponse::error('Login required', 403);
+            }
+        }
+
+        if ($role !== 'publisher' && ! $liveStream->isBroadcasting()) {
+            return ApiResponse::error('Stream is not live yet. Start the live event before viewers can connect.', 422);
+        }
+
+        $viewerId = $user ? 'viewer-'.$user->id : 'guest-'.Str::random(8);
+        $token = $this->liveKit->createViewerToken($liveStream, $viewerId);
+
+        $camera = $liveStream->activeCamera;
+
+        return ApiResponse::success([
+            'token' => $token,
+            'url' => config('livekit.url'),
+            'room_name' => $this->liveKit->roomName($liveStream),
+            'participant_identity' => $camera
+                ? $this->liveKit->participantIdentity($camera)
+                : null,
+        ]);
+    }
+
+    public function publicWebrtcToken(Request $request, LiveStream $liveStream): JsonResponse
+    {
+        if ($liveStream->visibility === LiveStream::VISIBILITY_PARENTS_ONLY) {
+            return ApiResponse::error('Login required to watch this stream', 403);
+        }
+
+        $request->merge(['role' => 'viewer']);
+
+        return $this->webrtcToken($request, $liveStream);
     }
 
     public function playback(Request $request, LiveStream $liveStream): RedirectResponse|JsonResponse

@@ -1,0 +1,14 @@
+port: 7880
+rtc:
+  tcp_port: 7881
+  # Single UDP mux port — easier on Windows than a wide port range
+  udp_port: 7882
+  use_external_ip: false
+  node_ip: 127.0.0.1
+  # Required when browser + LiveKit run on the same machine (localhost dev)
+  enable_loopback_candidate: true
+  allow_tcp_fallback: true
+keys:
+  devkey: kindergarten-dev-livekit-secret-key-32chars
+logging:
+  level: info

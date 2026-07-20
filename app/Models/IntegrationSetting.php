@@ -34,6 +34,10 @@ class IntegrationSetting extends Model
         'broadcast_host',
         'broadcast_port',
         'broadcast_scheme',
+        'livekit_enabled',
+        'livekit_url',
+        'livekit_api_key',
+        'livekit_api_secret',
     ];
 
     protected function casts(): array
@@ -42,10 +46,12 @@ class IntegrationSetting extends Model
             'email_enabled' => 'boolean',
             'whatsapp_enabled' => 'boolean',
             'broadcast_enabled' => 'boolean',
+            'livekit_enabled' => 'boolean',
             'email_password' => 'encrypted',
             'whatsapp_auth_token' => 'encrypted',
             'whatsapp_access_token' => 'encrypted',
             'broadcast_secret' => 'encrypted',
+            'livekit_api_secret' => 'encrypted',
         ];
     }
 

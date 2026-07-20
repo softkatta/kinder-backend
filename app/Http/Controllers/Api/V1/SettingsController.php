@@ -288,6 +288,11 @@ class SettingsController extends Controller
                 'integrations.broadcast.host' => ['nullable', 'string', 'max:255'],
                 'integrations.broadcast.port' => ['nullable', 'integer', 'min:1', 'max:65535'],
                 'integrations.broadcast.scheme' => ['nullable', 'in:http,https'],
+                'integrations.livekit' => ['sometimes', 'array'],
+                'integrations.livekit.enabled' => ['sometimes', 'boolean'],
+                'integrations.livekit.url' => ['nullable', 'string', 'max:255'],
+                'integrations.livekit.api_key' => ['nullable', 'string', 'max:120'],
+                'integrations.livekit.api_secret' => ['nullable', 'string', 'max:255'],
             ])['integrations']);
         }
 
@@ -304,7 +309,7 @@ class SettingsController extends Controller
         $this->expandOpaquePayload($request);
 
         $data = $request->validate([
-            'type' => ['required', 'in:email,whatsapp,broadcast'],
+            'type' => ['required', 'in:email,whatsapp,broadcast,livekit'],
             'to' => ['nullable', 'string', 'max:120'],
         ]);
 
@@ -316,6 +321,7 @@ class SettingsController extends Controller
                 'email' => $this->testEmail($data['to'] ?? $user?->email, $settings),
                 'whatsapp' => $this->testWhatsapp($data['to'] ?? $user?->phone, $settings),
                 'broadcast' => $this->testBroadcast($user?->id, $settings),
+                'livekit' => $this->testLivekit($settings),
             };
         } catch (\Throwable $e) {
             return ApiResponse::error($e->getMessage(), 422);
@@ -378,6 +384,36 @@ class SettingsController extends Controller
         return ApiResponse::success(null, 'Test broadcast event sent. Check admin realtime connection.');
     }
 
+    private function testLivekit($settings): JsonResponse
+    {
+        if (! $settings->livekit_enabled) {
+            return ApiResponse::error('LiveKit is disabled. Enable it and save settings first.', 422);
+        }
+
+        $this->integrations->applyLivekitConfig($settings);
+
+        $url = (string) config('livekit.url');
+        if ($url === '' || ! config('livekit.api_key') || ! config('livekit.api_secret')) {
+            return ApiResponse::error('LiveKit URL, API key, and API secret are required.', 422);
+        }
+
+        $parts = parse_url($url);
+        $host = $parts['host'] ?? 'localhost';
+        $port = (int) ($parts['port'] ?? ($parts['scheme'] === 'wss' ? 443 : 7880));
+        $socket = @fsockopen($host, $port, $errno, $errstr, 1.5);
+
+        if ($socket === false) {
+            return ApiResponse::error(
+                "Cannot reach LiveKit at {$host}:{$port}. Start the server (powershell -File scripts/start-livekit.ps1) or check the URL.",
+                422,
+            );
+        }
+
+        fclose($socket);
+
+        return ApiResponse::success(null, "LiveKit reachable at {$host}:{$port}");
+    }
+
     /** @param array<string, mixed> $payload */
     private function updateIntegrations(array $payload): void
     {
@@ -393,6 +429,11 @@ class SettingsController extends Controller
         if (isset($payload['broadcast'])) {
             $this->integrations->updateBroadcast($payload['broadcast'], $settings);
             $settings->refresh();
+        }
+        if (isset($payload['livekit'])) {
+            $this->integrations->updateLivekit($payload['livekit'], $settings);
+            $settings->refresh();
+            $this->integrations->applyLivekitConfig($settings);
         }
     }
 

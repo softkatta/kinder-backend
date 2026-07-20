@@ -1,0 +1,18 @@
+# Optional LiveKit server for built-in browser camera streaming.
+# Start from backend/: docker compose -f docker-compose.livekit.yml up -d
+# Then set in .env:
+#   LIVEKIT_URL=ws://localhost:7880
+#   LIVEKIT_API_KEY=devkey
+#   LIVEKIT_API_SECRET=kindergarten-dev-livekit-secret-key-32chars
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped

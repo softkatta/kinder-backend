@@ -59,6 +59,10 @@
             "Composer\\Config::disableProcessTimeout",
             "npx concurrently -c \"#93c5fd,#c4b5fd,#86efac\" \"php -d upload_max_filesize=25M -d post_max_size=30M artisan serve --host=127.0.0.1 --port=8010 --no-reload\" \"php artisan reverb:start\" \"npm run dev --prefix ../frontend\" --names=server,reverb,vite --kill-others"
         ],
+        "livekit": [
+            "@php -r \"echo 'Starting LiveKit…'.PHP_EOL;\"",
+            "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-livekit.ps1"
+        ],
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"

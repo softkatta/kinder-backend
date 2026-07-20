@@ -39,6 +39,10 @@ class IntegrationSettingsService
             'broadcast_host' => env('REVERB_HOST', 'localhost'),
             'broadcast_port' => (int) (env('REVERB_PORT') ?: 8080),
             'broadcast_scheme' => env('REVERB_SCHEME', 'http'),
+            'livekit_enabled' => filled(env('LIVEKIT_URL')),
+            'livekit_url' => env('LIVEKIT_URL'),
+            'livekit_api_key' => env('LIVEKIT_API_KEY', 'devkey'),
+            'livekit_api_secret' => env('LIVEKIT_API_SECRET'),
         ];
     }
 
@@ -78,6 +82,12 @@ class IntegrationSettingsService
                 'host' => $settings->broadcast_host,
                 'port' => $settings->broadcast_port,
                 'scheme' => $settings->broadcast_scheme,
+            ],
+            'livekit' => [
+                'enabled' => (bool) $settings->livekit_enabled,
+                'url' => $settings->livekit_url,
+                'api_key' => $settings->livekit_api_key,
+                'api_secret_set' => filled($settings->livekit_api_secret),
             ],
         ];
     }
@@ -165,6 +175,62 @@ class IntegrationSettingsService
             $update['broadcast_secret'] = $broadcast['secret'];
         }
         $settings->update($update);
+    }
+
+    /** @param array<string, mixed> $livekit */
+    public function updateLivekit(array $livekit, IntegrationSetting $settings): void
+    {
+        $update = [];
+        if (array_key_exists('enabled', $livekit)) {
+            $update['livekit_enabled'] = (bool) $livekit['enabled'];
+        }
+        if (array_key_exists('url', $livekit)) {
+            $update['livekit_url'] = $livekit['url'];
+        }
+        if (array_key_exists('api_key', $livekit)) {
+            $update['livekit_api_key'] = $livekit['api_key'];
+        }
+        if (! empty($livekit['api_secret'])) {
+            $update['livekit_api_secret'] = $livekit['api_secret'];
+        }
+        if ($update !== []) {
+            $settings->update($update);
+        }
+    }
+
+    public function applyLivekitConfig(?IntegrationSetting $settings = null): void
+    {
+        $settings ??= $this->get();
+
+        if (! $settings->livekit_enabled) {
+            config([
+                'livekit.url' => '',
+                'livekit.api_key' => '',
+                'livekit.api_secret' => '',
+            ]);
+
+            return;
+        }
+
+        $url = trim((string) ($settings->livekit_url ?? ''));
+        $apiKey = trim((string) ($settings->livekit_api_key ?? ''));
+        $apiSecret = (string) ($settings->livekit_api_secret ?? '');
+
+        if ($url === '' || $apiKey === '' || $apiSecret === '') {
+            config([
+                'livekit.url' => '',
+                'livekit.api_key' => '',
+                'livekit.api_secret' => '',
+            ]);
+
+            return;
+        }
+
+        config([
+            'livekit.url' => $url,
+            'livekit.api_key' => $apiKey,
+            'livekit.api_secret' => $apiSecret,
+        ]);
     }
 
     public function applyMailConfig(?IntegrationSetting $settings = null): void

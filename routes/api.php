@@ -108,6 +108,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/live/active', [LiveStreamController::class, 'publicActive']);
         Route::get('/live/upcoming', [LiveStreamController::class, 'publicUpcoming']);
         Route::get('/live/{liveStream}/watch', [LiveStreamController::class, 'publicWatch']);
+        Route::post('/live/{liveStream}/webrtc-token', [LiveStreamController::class, 'publicWebrtcToken']);
     });
 
     Route::prefix('auth')->group(function () {
@@ -370,6 +371,18 @@ Route::prefix('v1')->group(function () {
             Route::post('/id-cards/verify', [IdCardController::class, 'verify']);
         });
 
+        // Teacher / staff — mobile camera publisher (register before admin live-stream wildcard routes)
+        Route::middleware('role:teacher,staff')->group(function () {
+            Route::get('/teacher/live-events', [LiveStreamController::class, 'publisherEvents']);
+        });
+
+        Route::middleware('role:teacher,staff')->prefix('live-streams')->group(function () {
+            Route::get('/publisher/events', [LiveStreamController::class, 'publisherEvents']);
+            Route::post('/{liveStream}/join-camera', [LiveStreamController::class, 'joinCamera']);
+            Route::patch('/{liveStream}/cameras/{camera}/session', [LiveStreamController::class, 'updateCameraSession']);
+            Route::post('/{liveStream}/cameras/{camera}/disconnect', [LiveStreamController::class, 'disconnectCamera']);
+        });
+
         // Live stream management (admin only)
         Route::middleware('role:super_admin')->prefix('live-streams')->group(function () {
             Route::get('/cms-events', [LiveStreamController::class, 'cmsEvents']);
@@ -388,6 +401,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/{liveStream}/cameras/{camera}/preview', [LiveStreamController::class, 'previewCamera']);
             Route::patch('/{liveStream}/cameras/{camera}/mute', [LiveStreamController::class, 'muteCamera']);
             Route::post('/{liveStream}/cameras/{camera}/disconnect', [LiveStreamController::class, 'disconnectCamera']);
+            Route::get('/livekit/config', [LiveStreamController::class, 'livekitConfig']);
 
             Route::post('/{liveStream}/start', [LiveStreamController::class, 'start']);
             Route::post('/{liveStream}/pause', [LiveStreamController::class, 'pause']);
@@ -403,6 +417,10 @@ Route::prefix('v1')->group(function () {
             Route::get('/upcoming/viewer', [LiveStreamController::class, 'viewerUpcoming']);
             Route::get('/{liveStream}/watch', [LiveStreamController::class, 'watch']);
         });
+
+        // WebRTC tokens — staff publish; staff + viewers subscribe (authorization in controller)
+        Route::middleware('role:super_admin,teacher,staff,parent,student,guest')
+            ->post('/live-streams/{liveStream}/webrtc-token', [LiveStreamController::class, 'webrtcToken']);
 
         Route::post('/broadcasting/auth', function (Request $request) {
             return Broadcast::auth($request);
