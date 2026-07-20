@@ -304,11 +304,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/erp/school', [SettingsController::class, 'show']);
             Route::put('/erp/school', [SettingsController::class, 'update']);
             Route::post('/erp/school', [SettingsController::class, 'update']);
+            // Newest SPA: POST /tenant/profile (hcdn blocks PUT /erp/school with text/plain 403).
+            Route::get('/tenant/profile', [SettingsController::class, 'show']);
+            Route::post('/tenant/profile', [SettingsController::class, 'update']);
             Route::post('/settings/test-integration', [SettingsController::class, 'testIntegration']);
             Route::post('/school-config/test-integration', [SettingsController::class, 'testIntegration']);
             Route::post('/org-preferences/test-integration', [SettingsController::class, 'testIntegration']);
             Route::post('/org_preferences/test-integration', [SettingsController::class, 'testIntegration']);
             Route::post('/erp/school/test-integration', [SettingsController::class, 'testIntegration']);
+            Route::post('/tenant/profile/test-integration', [SettingsController::class, 'testIntegration']);
         });
 
         Route::middleware('role:parent')->prefix('portal/parent')->group(function () {
