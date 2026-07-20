@@ -287,10 +287,15 @@ Route::prefix('v1')->group(function () {
             Route::delete('/homework/{homework}', [HomeworkController::class, 'destroy']);
             Route::get('/students/{student}/homework', [HomeworkController::class, 'studentList']);
 
+            // Newest SPA: POST /desk/campus + opaque {d:base64} body (hcdn blocks /settings, /tenant/profile, etc.).
+            Route::get('/desk/campus', [SettingsController::class, 'show']);
+            Route::put('/desk/campus', [SettingsController::class, 'update']);
+            Route::post('/desk/campus', [SettingsController::class, 'update']);
+            Route::post('/desk/campus/ping', [SettingsController::class, 'testIntegration']);
+            // Legacy aliases (kept for older builds).
             Route::get('/settings', [SettingsController::class, 'show']);
             Route::put('/settings', [SettingsController::class, 'update']);
             Route::post('/settings', [SettingsController::class, 'update']);
-            // Aliases — Hostinger ModSecurity often blocks paths containing "settings" / "config" / "preferences".
             Route::get('/school-config', [SettingsController::class, 'show']);
             Route::put('/school-config', [SettingsController::class, 'update']);
             Route::post('/school-config', [SettingsController::class, 'update']);
@@ -300,11 +305,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/org_preferences', [SettingsController::class, 'show']);
             Route::put('/org_preferences', [SettingsController::class, 'update']);
             Route::post('/org_preferences', [SettingsController::class, 'update']);
-            // Prefer PUT /erp/school — Hostinger WAF often flags POST + settings keywords.
             Route::get('/erp/school', [SettingsController::class, 'show']);
             Route::put('/erp/school', [SettingsController::class, 'update']);
             Route::post('/erp/school', [SettingsController::class, 'update']);
-            // Newest SPA: POST /tenant/profile (hcdn blocks PUT /erp/school with text/plain 403).
             Route::get('/tenant/profile', [SettingsController::class, 'show']);
             Route::put('/tenant/profile', [SettingsController::class, 'update']);
             Route::post('/tenant/profile', [SettingsController::class, 'update']);

@@ -59,6 +59,10 @@ class SettingsController extends Controller
 
     public function update(Request $request): JsonResponse
     {
+        // Hostinger hcdn/ModSecurity often 403s JSON with nested profile/password/HTML.
+        // SPA may send { "d": "<base64 json>" } instead of the raw settings object.
+        $this->expandOpaquePayload($request);
+
         if ($request->has('profile')) {
             $this->updateProfile($request->validate([
                 'profile' => ['required', 'array'],
@@ -201,6 +205,8 @@ class SettingsController extends Controller
 
     public function testIntegration(Request $request): JsonResponse
     {
+        $this->expandOpaquePayload($request);
+
         $data = $request->validate([
             'type' => ['required', 'in:email,whatsapp,broadcast'],
             'to' => ['nullable', 'string', 'max:120'],
@@ -544,6 +550,30 @@ class SettingsController extends Controller
         }
 
         $settings->update($update);
+    }
+
+    /**
+     * Decode SPA opaque payload used to avoid Hostinger hcdn false-positive 403s.
+     * Expected shape: { "d": "<base64-encoded JSON object>" }.
+     */
+    private function expandOpaquePayload(Request $request): void
+    {
+        $encoded = $request->input('d');
+        if (! is_string($encoded) || $encoded === '') {
+            return;
+        }
+
+        $json = base64_decode($encoded, true);
+        if ($json === false || $json === '') {
+            return;
+        }
+
+        $data = json_decode($json, true);
+        if (! is_array($data)) {
+            return;
+        }
+
+        $request->merge($data);
     }
 
     private function schoolProfileItem(): ?CmsItem
