@@ -34,8 +34,8 @@ class EnsureInstalled
         try {
             $installed = DatabaseConnectivity::retry(
                 fn () => $this->license->isInstalled(),
-                attempts: 3,
-                sleepMs: 120,
+                attempts: 6,
+                sleepMs: 200,
             );
         } catch (Throwable $e) {
             // Already installed but DB credentials broken — never send users back to /install.

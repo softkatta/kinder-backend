@@ -16,7 +16,7 @@ final class DatabaseConnectivity
      * @param  callable(): T  $callback
      * @return T
      */
-    public static function retry(callable $callback, int $attempts = 3, int $sleepMs = 150): mixed
+    public static function retry(callable $callback, int $attempts = 6, int $sleepMs = 250): mixed
     {
         $attempts = max(1, $attempts);
         $last = null;
@@ -31,7 +31,8 @@ final class DatabaseConnectivity
             } catch (Throwable $e) {
                 $last = $e;
                 if ($i < $attempts - 1) {
-                    usleep($sleepMs * 1000);
+                    // Back off so Hostinger MySQL has time to accept the next connection.
+                    usleep(($sleepMs + ($i * 120)) * 1000);
                 }
             }
         }
