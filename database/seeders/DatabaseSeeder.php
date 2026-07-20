@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // Single-school product: exactly one school (tenant) row for this install.
         $tenant = Tenant::query()->firstOrCreate(
             ['slug' => 'little-stars'],
             [

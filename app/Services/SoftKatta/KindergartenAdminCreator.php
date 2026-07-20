@@ -21,6 +21,7 @@ class KindergartenAdminCreator implements CreatesAdminUser
             throw new RuntimeException('Administrator name, email, and password (min 8 characters) are required.');
         }
 
+        // Single-school install: reuse or create the one school record for this product.
         $tenant = Tenant::query()->first();
         if ($tenant === null) {
             $tenant = Tenant::query()->create([
@@ -28,6 +29,9 @@ class KindergartenAdminCreator implements CreatesAdminUser
                 'slug' => 'default',
                 'is_active' => true,
             ]);
+        } else {
+            // Never create a second school — keep this install single-tenant.
+            $tenant->forceFill(['is_active' => true])->save();
         }
 
         $role = Role::query()->firstOrCreate(

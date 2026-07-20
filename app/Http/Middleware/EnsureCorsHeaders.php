@@ -59,7 +59,7 @@ class EnsureCorsHeaders
         if (! $response->headers->has('Access-Control-Allow-Headers')) {
             $response->headers->set(
                 'Access-Control-Allow-Headers',
-                'Authorization, Content-Type, Accept, X-Tenant-ID, X-Requested-With, X-XSRF-TOKEN'
+                'Authorization, Content-Type, Accept, X-Requested-With, X-XSRF-TOKEN'
             );
         }
         $response->headers->set('Vary', 'Origin', false);
