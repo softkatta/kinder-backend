@@ -19,8 +19,6 @@ class LiveStreamCamera extends Model
 
     public const TYPE_RTMP = 'rtmp';
 
-    public const TYPE_BUILTIN = 'builtin_camera';
-
     public const STATUS_AVAILABLE = 'available';
 
     public const STATUS_CONNECTING = 'connecting';

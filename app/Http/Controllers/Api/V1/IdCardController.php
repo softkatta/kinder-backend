@@ -38,7 +38,23 @@ class IdCardController extends Controller
             });
         }
 
-        $cards = $query->get()->map(fn (IdCard $c) => $this->idCardService->toCardViewData($c));
+        $cards = $query->get()->map(function (IdCard $c) {
+            try {
+                return $this->idCardService->toCardViewData($c);
+            } catch (\Throwable $e) {
+                report($e);
+
+                return [
+                    'id' => $c->id,
+                    'card_type' => $c->card_type,
+                    'card_number' => $c->card_number,
+                    'status' => $c->status,
+                    'full_name' => $c->full_name,
+                    'meta' => $c->meta ?? [],
+                    'error' => 'Failed to build card preview',
+                ];
+            }
+        })->values();
 
         return ApiResponse::success($cards);
     }

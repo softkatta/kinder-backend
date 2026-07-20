@@ -6,6 +6,7 @@ use App\Models\CmsItem;
 use App\Models\IdCard;
 use App\Models\Tenant;
 use App\Services\QrScanResolver;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class IdCardService
@@ -36,13 +37,17 @@ class IdCardService
 
     public function ensureScanCode(IdCard $card): IdCard
     {
+        if (! Schema::hasColumn('id_cards', 'scan_code')) {
+            return $card;
+        }
+
         if ($card->scan_code) {
             return $card;
         }
 
         $card->update(['scan_code' => $this->scanResolver->generateScanCode()]);
 
-        return $card->fresh();
+        return $card->fresh() ?? $card;
     }
 
     public function schoolProfile(): array
@@ -83,31 +88,46 @@ class IdCardService
         $meta = $card->meta ?? [];
         $theme = $this->themeForType($card->card_type);
         $card = $this->ensureScanCode($card);
-        $qrPayload = $this->scanResolver->qrPayload($card->scan_code);
+        $qrPayload = $this->scanResolver->qrPayload(
+            (string) ($card->scan_code ?: $card->qr_token ?: $card->card_number)
+        );
+
+        $qrSvg = '';
+        $qrDataUri = '';
+        try {
+            $qrSvg = $this->qr->svg($qrPayload);
+            $qrDataUri = $this->qr->dataUri($qrPayload);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        $issueDate = $card->issue_date;
+        $expiryDate = $card->expiry_date;
 
         return [
             'id' => $card->id,
             'card_type' => $card->card_type,
             'card_number' => $card->card_number,
             'qr_token' => $card->qr_token,
+            'scan_code' => $card->scan_code,
             'status' => $card->status,
             'full_name' => $card->full_name,
             'photo_path' => $card->photo_path,
             'photo_url' => $this->photoUrl($card->photo_path),
             'blood_group' => $card->blood_group,
             'academic_year' => $card->academic_year,
-            'issue_date' => $card->issue_date->format('d M Y'),
-            'expiry_date' => $card->expiry_date->format('d M Y'),
-            'issue_date_raw' => $card->issue_date->toDateString(),
-            'expiry_date_raw' => $card->expiry_date->toDateString(),
+            'issue_date' => $issueDate?->format('d M Y') ?? '',
+            'expiry_date' => $expiryDate?->format('d M Y') ?? '',
+            'issue_date_raw' => $issueDate?->toDateString(),
+            'expiry_date_raw' => $expiryDate?->toDateString(),
             'emergency_contact' => $card->emergency_contact,
             'role_label' => $card->roleLabel(),
             'role_badge' => strtoupper($card->roleLabel()),
             'meta' => $meta,
             'school' => $school,
             'theme' => $theme,
-            'qr_svg' => $this->qr->svg($qrPayload),
-            'qr_data_uri' => $this->qr->dataUri($qrPayload),
+            'qr_svg' => $qrSvg,
+            'qr_data_uri' => $qrDataUri,
             'initials' => $this->initials($card->full_name),
             'validity_label' => $this->validityLabel($card),
             'subtitle_lines' => $this->subtitleLines($card),
@@ -190,14 +210,20 @@ class IdCardService
 
     private function validityLabel(IdCard $card): string
     {
-        if ($card->card_type === 'guest') {
-            $from = $card->meta['valid_from'] ?? $card->issue_date->format('M Y');
-            $until = $card->meta['valid_until'] ?? $card->expiry_date->format('M Y');
+        $issue = $card->issue_date;
+        $expiry = $card->expiry_date;
 
-            return "{$from} – {$until}";
+        if ($card->card_type === 'guest') {
+            $from = $card->meta['valid_from'] ?? ($issue?->format('M Y') ?? '');
+            $until = $card->meta['valid_until'] ?? ($expiry?->format('M Y') ?? '');
+
+            return trim("{$from} – {$until}", ' –');
         }
 
-        return ($card->academic_year ?? $card->issue_date->format('Y')).' · Valid till '.$card->expiry_date->format('M Y');
+        $year = $card->academic_year ?? ($issue?->format('Y') ?? '');
+        $till = $expiry?->format('M Y') ?? '';
+
+        return trim($year.($till !== '' ? ' · Valid till '.$till : ''));
     }
 
     private function subtitleLines(IdCard $card): array
@@ -235,7 +261,9 @@ class IdCardService
             'card_type' => $data['card_type'],
             'card_number' => $data['card_number'] ?? $this->generateCardNumber($data['card_type']),
             'qr_token' => $data['qr_token'] ?? $this->generateQrToken(),
-            'scan_code' => $data['scan_code'] ?? $this->scanResolver->generateScanCode(),
+            ...(Schema::hasColumn('id_cards', 'scan_code') ? [
+                'scan_code' => $data['scan_code'] ?? $this->scanResolver->generateScanCode(),
+            ] : []),
             'status' => $data['status'] ?? 'active',
             'full_name' => $data['full_name'],
             'photo_path' => $data['photo_path'] ?? null,

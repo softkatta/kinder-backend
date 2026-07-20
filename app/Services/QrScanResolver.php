@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Guest;
 use App\Models\IdCard;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class QrScanResolver
@@ -59,9 +60,14 @@ class QrScanResolver
 
         return Guest::query()
             ->where(function ($q) use ($key) {
-                $q->where('scan_code', $key)
-                    ->orWhere('qr_token', $key)
-                    ->orWhere('guest_code', $key);
+                if (Schema::hasColumn('guests', 'scan_code')) {
+                    $q->where('scan_code', $key)
+                        ->orWhere('qr_token', $key)
+                        ->orWhere('guest_code', $key);
+                } else {
+                    $q->where('qr_token', $key)
+                        ->orWhere('guest_code', $key);
+                }
             })
             ->first();
     }
@@ -75,9 +81,14 @@ class QrScanResolver
 
         return IdCard::query()
             ->where(function ($q) use ($key) {
-                $q->where('scan_code', $key)
-                    ->orWhere('qr_token', $key)
-                    ->orWhere('card_number', $key);
+                if (Schema::hasColumn('id_cards', 'scan_code')) {
+                    $q->where('scan_code', $key)
+                        ->orWhere('qr_token', $key)
+                        ->orWhere('card_number', $key);
+                } else {
+                    $q->where('qr_token', $key)
+                        ->orWhere('card_number', $key);
+                }
             })
             ->first();
     }

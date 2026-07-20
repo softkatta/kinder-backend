@@ -392,6 +392,7 @@ class SettingsController extends Controller
         }
         if (isset($payload['broadcast'])) {
             $this->integrations->updateBroadcast($payload['broadcast'], $settings);
+            $settings->refresh();
         }
     }
 

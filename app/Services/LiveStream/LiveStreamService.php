@@ -20,8 +20,6 @@ class LiveStreamService
 {
     public function __construct(
         private readonly LiveStreamNotificationService $notifications,
-        private readonly LiveStreamUrlValidator $urlValidator,
-        private readonly LiveKitService $liveKit,
     ) {}
     /** @return list<string> */
     public static function adminRoles(): array
@@ -165,13 +163,6 @@ class LiveStreamService
                 'mode' => 'vimeo',
                 'video_id' => $this->extractVimeoId($camera->stream_url),
             ],
-            LiveStreamCamera::TYPE_BUILTIN => [
-                'mode' => 'builtin_camera',
-                'stream_id' => $stream->id,
-                'camera_id' => $camera->id,
-                'room_name' => $this->liveKit->roomName($stream),
-                'participant_identity' => $this->liveKit->participantIdentity($camera),
-            ],
             LiveStreamCamera::TYPE_EMBED, LiveStreamCamera::TYPE_FACEBOOK, LiveStreamCamera::TYPE_RTMP => [
                 'mode' => 'signed_redirect',
                 'src' => $signedPlayback,
@@ -213,96 +204,10 @@ class LiveStreamService
         return $stream->fresh(['activeCamera', 'cameras']);
     }
 
-    public function joinCamera(LiveStream $stream, User $user, array $data): LiveStreamCamera
-    {
-        if (! $this->canPublisherJoin($stream)) {
-            throw ValidationException::withMessages([
-                'stream' => 'This event is not open for camera connections yet. Ask admin to link and schedule the CMS event.',
-            ]);
-        }
-
-        $this->disconnectUserCameras($user, exceptStreamId: $stream->id);
-
-        $existing = $stream->cameras()
-            ->where('publisher_user_id', $user->id)
-            ->first();
-
-        $name = trim((string) ($data['name'] ?? '')) ?: $user->name.' Camera';
-        $location = trim((string) ($data['location'] ?? '')) ?: null;
-        $deviceName = trim((string) ($data['device_name'] ?? '')) ?: null;
-
-        if ($existing) {
-            $existing->update([
-                'name' => $name,
-                'location' => $location,
-                'device_name' => $deviceName,
-                'connection_status' => LiveStreamCamera::STATUS_CONNECTING,
-                'is_enabled' => true,
-                'joined_at' => $existing->joined_at ?? now(),
-                'last_seen_at' => now(),
-            ]);
-
-            $camera = $existing->fresh();
-        } else {
-            $order = (int) $stream->cameras()->max('display_order') + 1;
-            $camera = $stream->cameras()->create([
-                'publisher_user_id' => $user->id,
-                'name' => $name,
-                'location' => $location,
-                'stream_type' => LiveStreamCamera::TYPE_BUILTIN,
-                'stream_url' => 'builtin://mobile',
-                'display_order' => $order,
-                'is_enabled' => true,
-                'connection_status' => LiveStreamCamera::STATUS_CONNECTING,
-                'device_name' => $deviceName,
-                'joined_at' => now(),
-                'last_seen_at' => now(),
-            ]);
-        }
-
-        $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_session_updated', $camera->id);
-
-        return $camera->load('publisher.roles');
-    }
-
-    public function updateCameraSession(LiveStream $stream, LiveStreamCamera $camera, User $user, array $data): LiveStreamCamera
-    {
-        $this->assertPublisherOwnsCamera($camera, $user);
-
-        if ((int) $camera->live_stream_id !== (int) $stream->id) {
-            throw ValidationException::withMessages(['camera' => 'Camera not found on this stream.']);
-        }
-
-        $status = $data['connection_status'] ?? $camera->connection_status;
-        if (! in_array($status, LiveStreamCamera::connectionStatuses(), true)) {
-            throw ValidationException::withMessages(['connection_status' => 'Invalid connection status.']);
-        }
-
-        $camera->update([
-            'connection_status' => $status,
-            'device_name' => $data['device_name'] ?? $camera->device_name,
-            'battery_level' => array_key_exists('battery_level', $data) ? $data['battery_level'] : $camera->battery_level,
-            'signal_strength' => array_key_exists('signal_strength', $data) ? $data['signal_strength'] : $camera->signal_strength,
-            'last_seen_at' => now(),
-        ]);
-
-        if ($status === LiveStreamCamera::STATUS_LIVE && (int) $stream->active_camera_id !== (int) $camera->id) {
-            $camera->update(['connection_status' => LiveStreamCamera::STATUS_READY]);
-        }
-
-        $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_session_updated', $camera->id);
-
-        return $camera->fresh(['publisher.roles']);
-    }
-
     public function disconnectCamera(LiveStream $stream, LiveStreamCamera $camera, User $user, bool $adminForce = false): LiveStreamCamera
     {
         if ((int) $camera->live_stream_id !== (int) $stream->id) {
             throw ValidationException::withMessages(['camera' => 'Camera not found on this stream.']);
-        }
-
-        if (! $adminForce) {
-            $this->assertPublisherOwnsCamera($camera, $user);
         }
 
         $camera->update([
@@ -340,53 +245,6 @@ class LiveStreamService
         $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_audio_updated', $camera->id);
 
         return $camera->fresh(['publisher.roles']);
-    }
-
-    /** @return list<array<string, mixed>> */
-    public function publisherEventsForUser(): array
-    {
-        return LiveStream::query()
-            ->where(function ($query) {
-                $query->whereIn('status', [
-                    LiveStream::STATUS_LIVE,
-                    LiveStream::STATUS_PAUSED,
-                    LiveStream::STATUS_SCHEDULED,
-                ])->orWhere(function ($query) {
-                    $query->where('status', LiveStream::STATUS_DRAFT)
-                        ->whereNotNull('cms_item_id');
-                });
-            })
-            ->where('status', '!=', LiveStream::STATUS_CANCELLED)
-            ->orderByRaw("CASE WHEN status IN ('live', 'paused') THEN 0 WHEN status = 'scheduled' THEN 1 ELSE 2 END")
-            ->orderBy('scheduled_start_at')
-            ->get()
-            ->map(fn (LiveStream $stream) => [
-                'id' => $stream->id,
-                'title' => $stream->title,
-                'description' => $stream->description,
-                'status' => $stream->status,
-                'display_status' => $stream->displayStatus(),
-                'status_label' => $this->displayStatusLabel($stream),
-                'scheduled_start_at' => $this->formatStaffDateTime($stream->scheduled_start_at),
-                'can_join' => $this->canPublisherJoin($stream),
-            ])
-            ->values()
-            ->all();
-    }
-
-    /** @return array<string, mixed> */
-    public function toPublisherJoinPayload(LiveStream $stream, LiveStreamCamera $camera): array
-    {
-        return [
-            'stream' => [
-                'id' => $stream->id,
-                'title' => $stream->title,
-                'status' => $stream->status,
-                'display_status' => $stream->displayStatus(),
-                'status_label' => $this->displayStatusLabel($stream),
-            ],
-            'camera' => $this->toPublisherCamera($camera),
-        ];
     }
 
     public function reorderCameras(LiveStream $stream, array $orderedIds): LiveStream
@@ -581,7 +439,7 @@ class LiveStreamService
 
         if (! $activeId) {
             throw ValidationException::withMessages([
-                'cameras' => 'No cameras available. Ask a teacher or staff member to connect from Join Live on their phone, or add an external stream camera first.',
+                'cameras' => 'Add at least one camera with a YouTube, HLS, Vimeo, Facebook, RTMP, or embed stream URL before going live.',
             ]);
         }
 
@@ -966,21 +824,6 @@ class LiveStreamService
     }
 
     /** @return array<string, mixed> */
-    private function toPublisherCamera(LiveStreamCamera $camera): array
-    {
-        return [
-            'id' => $camera->id,
-            'name' => $camera->name,
-            'location' => $camera->location,
-            'stream_type' => $camera->stream_type,
-            'connection_status' => $camera->connection_status ?? LiveStreamCamera::STATUS_OFFLINE,
-            'connection_status_label' => $this->connectionStatusLabel($camera->connection_status ?? LiveStreamCamera::STATUS_OFFLINE),
-            'device_name' => $camera->device_name,
-            'audio_muted' => (bool) $camera->audio_muted,
-            'joined_at' => $camera->joined_at?->toIso8601String(),
-        ];
-    }
-
     private function connectionStatusLabel(string $status): string
     {
         return match ($status) {
@@ -1004,64 +847,6 @@ class LiveStreamService
         }
 
         return asset('storage/'.ltrim($path, '/'));
-    }
-
-    private function canPublisherJoin(LiveStream $stream): bool
-    {
-        if ($stream->status === LiveStream::STATUS_CANCELLED) {
-            return false;
-        }
-
-        if (in_array($stream->status, [
-            LiveStream::STATUS_LIVE,
-            LiveStream::STATUS_PAUSED,
-            LiveStream::STATUS_SCHEDULED,
-        ], true)) {
-            return true;
-        }
-
-        return $stream->status === LiveStream::STATUS_DRAFT && $stream->cms_item_id;
-    }
-
-    private function assertPublisherOwnsCamera(LiveStreamCamera $camera, User $user): void
-    {
-        if ($user->hasAnyRole(self::adminRoles())) {
-            return;
-        }
-
-        if ((int) $camera->publisher_user_id !== (int) $user->id) {
-            throw ValidationException::withMessages(['camera' => 'You can only manage your own camera.']);
-        }
-    }
-
-    private function disconnectUserCameras(User $user, ?int $exceptStreamId = null): void
-    {
-        $query = LiveStreamCamera::query()
-            ->where('publisher_user_id', $user->id)
-            ->whereIn('connection_status', [
-                LiveStreamCamera::STATUS_AVAILABLE,
-                LiveStreamCamera::STATUS_CONNECTING,
-                LiveStreamCamera::STATUS_CONNECTED,
-                LiveStreamCamera::STATUS_READY,
-                LiveStreamCamera::STATUS_LIVE,
-            ]);
-
-        if ($exceptStreamId) {
-            $query->where('live_stream_id', '!=', $exceptStreamId);
-        }
-
-        $cameras = $query->with('liveStream')->get();
-
-        foreach ($cameras as $camera) {
-            $camera->update(['connection_status' => LiveStreamCamera::STATUS_DISCONNECTED]);
-            if ($camera->liveStream) {
-                $this->broadcastUpdate(
-                    $camera->liveStream->fresh(['activeCamera', 'cameras']),
-                    'camera_disconnected',
-                    $camera->id,
-                );
-            }
-        }
     }
 
     private function syncMobileCameraStatuses(LiveStream $stream): void
