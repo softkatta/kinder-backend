@@ -158,7 +158,11 @@ class LiveStreamController extends Controller
         ]);
 
         if (! $liveStream->active_camera_id && $camera->is_enabled) {
-            $liveStream->update(['active_camera_id' => $camera->id]);
+            $liveStream->update([
+                'active_camera_id' => $camera->id,
+                'active_camera_ids' => [(int) $camera->id],
+                'layout_mode' => max(1, (int) ($liveStream->layout_mode ?? 1)),
+            ]);
         }
 
         $this->streams->broadcastUpdate($liveStream->fresh(), 'camera_added');
@@ -188,7 +192,9 @@ class LiveStreamController extends Controller
 
         if (! $camera->is_enabled && (int) $liveStream->active_camera_id === (int) $camera->id) {
             $next = $liveStream->cameras()->where('is_enabled', true)->orderBy('display_order')->first();
-            $liveStream->update(['active_camera_id' => $next?->id]);
+            $this->streams->setActiveCamerasAfterRemoval($liveStream, (int) $camera->id, $next?->id);
+        } elseif (! $camera->is_enabled) {
+            $this->streams->setActiveCamerasAfterRemoval($liveStream, (int) $camera->id, $liveStream->active_camera_id);
         }
 
         $this->streams->broadcastUpdate($liveStream->fresh(), 'camera_updated');
@@ -202,7 +208,9 @@ class LiveStreamController extends Controller
 
         if ((int) $liveStream->active_camera_id === (int) $camera->id) {
             $next = $liveStream->cameras()->where('id', '!=', $camera->id)->where('is_enabled', true)->orderBy('display_order')->first();
-            $liveStream->update(['active_camera_id' => $next?->id]);
+            $this->streams->setActiveCamerasAfterRemoval($liveStream, (int) $camera->id, $next?->id);
+        } else {
+            $this->streams->setActiveCamerasAfterRemoval($liveStream, (int) $camera->id, $liveStream->active_camera_id);
         }
 
         $camera->delete();
@@ -232,6 +240,29 @@ class LiveStreamController extends Controller
         $stream = $this->streams->setActiveCamera($liveStream, (int) $data['camera_id']);
 
         return ApiResponse::success($this->streams->toStaffPayload($stream), 'Active camera updated');
+    }
+
+    public function setActiveCameras(Request $request, LiveStream $liveStream): JsonResponse
+    {
+        $data = $request->validate([
+            'camera_ids' => ['required', 'array', 'min:1', 'max:4'],
+            'camera_ids.*' => ['integer'],
+        ]);
+
+        $stream = $this->streams->setActiveCameras($liveStream, $data['camera_ids']);
+
+        return ApiResponse::success($this->streams->toStaffPayload($stream), 'Layout cameras updated');
+    }
+
+    public function setLayout(Request $request, LiveStream $liveStream): JsonResponse
+    {
+        $data = $request->validate([
+            'layout_mode' => ['required', 'integer', 'min:1', 'max:4'],
+        ]);
+
+        $stream = $this->streams->setLayoutMode($liveStream, (int) $data['layout_mode']);
+
+        return ApiResponse::success($this->streams->toStaffPayload($stream), 'Player layout updated');
     }
 
     public function start(LiveStream $liveStream): JsonResponse

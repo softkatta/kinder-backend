@@ -398,6 +398,8 @@ Route::prefix('v1')->group(function () {
             Route::delete('/{liveStream}/cameras/{camera}', [LiveStreamController::class, 'destroyCamera']);
             Route::patch('/{liveStream}/cameras/reorder', [LiveStreamController::class, 'reorderCameras']);
             Route::patch('/{liveStream}/active-camera', [LiveStreamController::class, 'setActiveCamera']);
+            Route::patch('/{liveStream}/active-cameras', [LiveStreamController::class, 'setActiveCameras']);
+            Route::patch('/{liveStream}/layout', [LiveStreamController::class, 'setLayout']);
             Route::get('/{liveStream}/cameras/{camera}/preview', [LiveStreamController::class, 'previewCamera']);
             Route::patch('/{liveStream}/cameras/{camera}/mute', [LiveStreamController::class, 'muteCamera']);
             Route::post('/{liveStream}/cameras/{camera}/disconnect', [LiveStreamController::class, 'disconnectCamera']);

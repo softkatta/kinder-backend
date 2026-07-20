@@ -88,6 +88,8 @@ class LiveStreamService
             'display_status' => $stream->displayStatus(),
             'status_label' => $this->displayStatusLabel($stream),
             'active_camera_id' => $stream->active_camera_id,
+            'layout_mode' => $this->resolvedLayoutMode($stream),
+            'active_camera_ids' => $this->resolvedActiveCameraIds($stream),
             'started_at' => $stream->started_at?->toIso8601String(),
             'paused_at' => $stream->paused_at?->toIso8601String(),
             'stopped_at' => $stream->stopped_at?->toIso8601String(),
@@ -95,20 +97,28 @@ class LiveStreamService
             'countdown_seconds' => $this->countdownSeconds($stream),
             'cameras' => $stream->cameras->map(fn (LiveStreamCamera $c) => [
                 ...$this->toStaffCamera($c),
-                'is_active' => (int) $stream->active_camera_id === (int) $c->id,
+                'is_active' => in_array((int) $c->id, $this->resolvedActiveCameraIds($stream), true),
+                'is_primary' => (int) $stream->active_camera_id === (int) $c->id,
             ])->values()->all(),
             'active_camera' => $stream->activeCamera ? [
                 ...$this->toStaffCamera($stream->activeCamera),
                 'is_active' => true,
+                'is_primary' => true,
             ] : null,
+            'active_cameras' => $this->activeCamerasSummary($stream),
         ];
     }
 
     public function toViewerPayload(LiveStream $stream): array
     {
-        $stream->loadMissing('activeCamera');
+        $stream->loadMissing(['activeCamera', 'cameras']);
 
         $active = $stream->activeCamera;
+        $activeIds = $this->resolvedActiveCameraIds($stream);
+        $watchable = $stream->isBroadcasting()
+            && $active
+            && $active->is_enabled
+            && $activeIds !== [];
 
         return [
             'id' => $stream->id,
@@ -118,7 +128,7 @@ class LiveStreamService
             'status' => $stream->status,
             'display_status' => $stream->displayStatus(),
             'status_label' => $this->displayStatusLabel($stream),
-            'is_watchable' => $stream->isBroadcasting() && $active && $active->is_enabled,
+            'is_watchable' => $watchable,
             'is_upcoming' => $stream->isUpcoming(),
             'is_scheduled' => $stream->status === LiveStream::STATUS_SCHEDULED,
             'enable_countdown' => (bool) $stream->enable_countdown,
@@ -128,30 +138,45 @@ class LiveStreamService
             'viewer_count' => (int) $stream->viewer_count,
             'audio_enabled' => (bool) ($stream->audio_enabled ?? true),
             'visibility' => $stream->visibility ?? LiveStream::VISIBILITY_PUBLIC,
+            'layout_mode' => $this->resolvedLayoutMode($stream),
+            'active_camera_ids' => $activeIds,
             'active_camera' => $active ? [
                 'id' => $active->id,
                 'name' => $active->name,
                 'location' => $active->location,
                 'stream_type' => $active->stream_type,
             ] : null,
+            'active_cameras' => $this->activeCamerasSummary($stream),
         ];
     }
 
     public function toWatchPayload(LiveStream $stream): array
     {
-        $stream->loadMissing('activeCamera');
+        $stream->loadMissing(['activeCamera', 'cameras']);
         $viewer = $this->toViewerPayload($stream);
 
-        if (! $viewer['is_watchable'] || ! $stream->activeCamera) {
+        if (! $viewer['is_watchable']) {
             return $viewer;
         }
 
-        $camera = $stream->activeCamera;
-        $playback = $this->playbackConfig($stream, $camera);
+        $playbacks = [];
+        foreach ($this->orderedActiveCameras($stream) as $camera) {
+            $playbacks[] = [
+                ...$this->playbackConfig($stream, $camera),
+                'camera_id' => $camera->id,
+                'camera_name' => $camera->name,
+                'camera_location' => $camera->location,
+            ];
+        }
+
+        if ($playbacks === []) {
+            return $viewer;
+        }
 
         return [
             ...$viewer,
-            'playback' => $playback,
+            'playback' => $playbacks[0],
+            'playbacks' => $playbacks,
         ];
     }
 
@@ -214,9 +239,82 @@ class LiveStreamService
             throw ValidationException::withMessages(['camera_id' => 'Camera not found or disabled.']);
         }
 
-        $stream->update(['active_camera_id' => $camera->id]);
+        $layout = $this->resolvedLayoutMode($stream);
+        $ids = $this->resolvedActiveCameraIds($stream);
+        $ids = array_values(array_filter($ids, fn (int $id) => $id !== (int) $camera->id));
+        array_unshift($ids, (int) $camera->id);
+        $ids = array_slice($ids, 0, $layout);
+
+        $stream->update([
+            'active_camera_id' => $camera->id,
+            'active_camera_ids' => $ids,
+        ]);
         $this->syncMobileCameraStatuses($stream->fresh(['cameras', 'activeCamera']));
         $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_switched');
+
+        return $stream->fresh(['activeCamera', 'cameras']);
+    }
+
+    public function setLayoutMode(LiveStream $stream, int $layoutMode): LiveStream
+    {
+        $enabledCount = $stream->cameras()->where('is_enabled', true)->count();
+        $max = max(1, min(4, $enabledCount > 0 ? $enabledCount : 4));
+        $mode = max(1, min($max, $layoutMode));
+
+        $ids = $this->resolvedActiveCameraIds($stream);
+        if ($ids === [] && $stream->active_camera_id) {
+            $ids = [(int) $stream->active_camera_id];
+        }
+        $ids = array_slice($ids, 0, $mode);
+
+        $stream->update([
+            'layout_mode' => $mode,
+            'active_camera_ids' => $ids,
+            'active_camera_id' => $ids[0] ?? $stream->active_camera_id,
+        ]);
+
+        $this->syncMobileCameraStatuses($stream->fresh(['cameras', 'activeCamera']));
+        $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'layout_updated');
+
+        return $stream->fresh(['activeCamera', 'cameras']);
+    }
+
+    /** @param list<int> $cameraIds */
+    public function setActiveCameras(LiveStream $stream, array $cameraIds): LiveStream
+    {
+        $layout = $this->resolvedLayoutMode($stream);
+        $unique = [];
+        foreach ($cameraIds as $id) {
+            $id = (int) $id;
+            if ($id > 0 && ! in_array($id, $unique, true)) {
+                $unique[] = $id;
+            }
+        }
+
+        if ($unique === []) {
+            throw ValidationException::withMessages(['camera_ids' => 'Select at least one camera.']);
+        }
+
+        $unique = array_slice($unique, 0, $layout);
+        $cameras = $stream->cameras()->whereIn('id', $unique)->where('is_enabled', true)->get()->keyBy('id');
+
+        $ordered = [];
+        foreach ($unique as $id) {
+            if (! $cameras->has($id)) {
+                throw ValidationException::withMessages([
+                    'camera_ids' => "Camera {$id} was not found or is disabled.",
+                ]);
+            }
+            $ordered[] = $id;
+        }
+
+        $stream->update([
+            'active_camera_ids' => $ordered,
+            'active_camera_id' => $ordered[0],
+        ]);
+
+        $this->syncMobileCameraStatuses($stream->fresh(['cameras', 'activeCamera']));
+        $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'cameras_activated');
 
         return $stream->fresh(['activeCamera', 'cameras']);
     }
@@ -595,9 +693,16 @@ class LiveStreamService
 
         $this->stopOtherLiveStreams($stream->id);
 
+        $layout = $this->resolvedLayoutMode($stream);
+        $ids = $this->resolvedActiveCameraIds($stream);
+        $ids = array_values(array_filter($ids, fn (int $id) => $id !== (int) $activeId));
+        array_unshift($ids, (int) $activeId);
+        $ids = array_slice($ids, 0, $layout);
+
         $stream->update([
             'status' => LiveStream::STATUS_LIVE,
             'active_camera_id' => $activeId,
+            'active_camera_ids' => $ids,
             'started_at' => now(),
             'paused_at' => null,
             'stopped_at' => null,
@@ -745,7 +850,8 @@ class LiveStreamService
 
     public function resolvePlaybackCamera(LiveStream $stream, int $cameraId): ?LiveStreamCamera
     {
-        if ((int) $stream->active_camera_id !== $cameraId) {
+        $activeIds = $this->resolvedActiveCameraIds($stream);
+        if (! in_array($cameraId, $activeIds, true)) {
             return null;
         }
 
@@ -753,9 +859,72 @@ class LiveStreamService
             return null;
         }
 
-        $camera = $stream->cameras()->whereKey($cameraId)->where('is_enabled', true)->first();
+        return $stream->cameras()->whereKey($cameraId)->where('is_enabled', true)->first();
+    }
 
-        return $camera;
+    /** @return list<int> */
+    public function resolvedActiveCameraIds(LiveStream $stream): array
+    {
+        $ids = $stream->active_camera_ids;
+        if (is_array($ids) && $ids !== []) {
+            return array_values(array_map('intval', $ids));
+        }
+
+        return $stream->active_camera_id ? [(int) $stream->active_camera_id] : [];
+    }
+
+    public function resolvedLayoutMode(LiveStream $stream): int
+    {
+        $mode = (int) ($stream->layout_mode ?? 1);
+
+        return max(1, min(4, $mode > 0 ? $mode : 1));
+    }
+
+    /** @return list<LiveStreamCamera> */
+    private function orderedActiveCameras(LiveStream $stream): array
+    {
+        $stream->loadMissing('cameras');
+        $byId = $stream->cameras->keyBy('id');
+        $ordered = [];
+        foreach ($this->resolvedActiveCameraIds($stream) as $id) {
+            $camera = $byId->get($id);
+            if ($camera && $camera->is_enabled) {
+                $ordered[] = $camera;
+            }
+        }
+
+        return $ordered;
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function activeCamerasSummary(LiveStream $stream): array
+    {
+        return array_map(fn (LiveStreamCamera $camera) => [
+            'id' => $camera->id,
+            'name' => $camera->name,
+            'location' => $camera->location,
+            'stream_type' => $camera->stream_type,
+        ], $this->orderedActiveCameras($stream));
+    }
+
+    public function setActiveCamerasAfterRemoval(LiveStream $stream, int $removedId, ?int $preferredPrimary): void
+    {
+        $ids = array_values(array_filter(
+            $this->resolvedActiveCameraIds($stream),
+            fn (int $id) => $id !== $removedId,
+        ));
+
+        if ($preferredPrimary && ! in_array((int) $preferredPrimary, $ids, true)) {
+            array_unshift($ids, (int) $preferredPrimary);
+        }
+
+        $layout = $this->resolvedLayoutMode($stream);
+        $ids = array_slice($ids, 0, $layout);
+
+        $stream->update([
+            'active_camera_ids' => $ids,
+            'active_camera_id' => $ids[0] ?? null,
+        ]);
     }
 
     public function createStream(array $data): LiveStream
@@ -1074,14 +1243,14 @@ class LiveStreamService
 
     private function syncMobileCameraStatuses(LiveStream $stream): void
     {
-        $activeId = (int) $stream->active_camera_id;
+        $activeIds = $this->resolvedActiveCameraIds($stream);
 
         foreach ($stream->cameras as $camera) {
             if (! $camera->isMobilePublisher() || ! $camera->isOnline()) {
                 continue;
             }
 
-            $nextStatus = (int) $camera->id === $activeId
+            $nextStatus = in_array((int) $camera->id, $activeIds, true)
                 ? LiveStreamCamera::STATUS_LIVE
                 : LiveStreamCamera::STATUS_READY;
 
