@@ -148,7 +148,6 @@ class PublicContentController extends Controller
         ], [
             'logo_image' => $profile?->image,
             'favicon_image' => is_array($profile?->meta) ? ($profile->meta['favicon_image'] ?? null) : null,
-            'short_name' => is_array($profile?->meta) ? ($profile->meta['short_name'] ?? null) : null,
         ]));
     }
 

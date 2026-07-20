@@ -42,6 +42,68 @@ class SettingsController extends Controller
         'page_legal_image',
     ];
 
+    /** Text meta keys that support Marathi overrides (`{key}_mr`). */
+    private const PROFILE_LOCALIZED_KEYS = [
+        'short_name',
+        'address',
+        'city',
+        'hours',
+        'meta_title',
+        'meta_description',
+        'home_about_label',
+        'home_about_title',
+        'home_about_paragraphs',
+        'home_why_label',
+        'home_why_title',
+        'home_why_panel_title',
+        'home_why_panel_desc',
+        'home_why_choose',
+        'home_learning_label',
+        'home_learning_title_accent',
+        'home_learning_title_rest',
+        'home_learning_paragraphs',
+        'home_learning_items',
+        'home_enroll_steps',
+        'home_cta_title',
+        'home_cta_subtitle',
+        'principal_name',
+        'principal_message',
+        'vision',
+        'mission',
+        'about_values_label',
+        'about_values_title',
+        'about_values',
+        'about_journey_label',
+        'about_journey_title',
+        'about_timeline',
+        'school_name',
+        'title',
+    ];
+
+    /** @return array<string, mixed> */
+    private function profileMrValidationRules(): array
+    {
+        $rules = [
+            'profile.name_mr' => ['sometimes', 'nullable', 'string', 'max:255'],
+        ];
+
+        foreach (self::PROFILE_LOCALIZED_KEYS as $key) {
+            $max = match ($key) {
+                'home_about_paragraphs', 'home_why_choose', 'home_learning_items', 'home_enroll_steps',
+                'about_values', 'about_timeline' => 5000,
+                'home_learning_paragraphs' => 3000,
+                'principal_message' => 10000,
+                'home_why_panel_desc', 'vision', 'mission', 'meta_description' => 1000,
+                'address' => 500,
+                'home_cta_subtitle' => 500,
+                default => 255,
+            };
+            $rules["profile.{$key}_mr"] = ['sometimes', 'nullable', 'string', "max:{$max}"];
+        }
+
+        return $rules;
+    }
+
     public function __construct(
         private readonly IntegrationSettingsService $integrations,
         private readonly WhatsAppService $whatsapp,
@@ -64,7 +126,7 @@ class SettingsController extends Controller
         $this->expandOpaquePayload($request);
 
         if ($request->has('profile')) {
-            $this->updateProfile($request->validate([
+            $this->updateProfile($request->validate(array_merge([
                 'profile' => ['required', 'array'],
                 'profile.name' => ['sometimes', 'string', 'max:255'],
                 'profile.short_name' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -123,7 +185,7 @@ class SettingsController extends Controller
                 'profile.home_cta_subtitle' => ['sometimes', 'nullable', 'string', 'max:500'],
                 'profile.established_year' => ['sometimes', 'nullable', 'string', 'max:20'],
                 'profile.principal_name' => ['sometimes', 'nullable', 'string', 'max:120'],
-                'profile.principal_message' => ['sometimes', 'nullable', 'string', 'max:2000'],
+                'profile.principal_message' => ['sometimes', 'nullable', 'string', 'max:10000'],
                 'profile.principal_image' => ['sometimes', 'nullable', 'string', 'max:500'],
                 'profile.vision' => ['sometimes', 'nullable', 'string', 'max:1000'],
                 'profile.mission' => ['sometimes', 'nullable', 'string', 'max:1000'],
@@ -136,7 +198,7 @@ class SettingsController extends Controller
                 'profile.logo_image' => ['sometimes', 'nullable', 'string', 'max:500'],
                 'profile.favicon_image' => ['sometimes', 'nullable', 'string', 'max:500'],
                 'profile.cover_image' => ['sometimes', 'nullable', 'string', 'max:500'],
-            ])['profile']);
+            ], $this->profileMrValidationRules()))['profile']);
         }
 
         if ($request->has('notifications')) {
@@ -372,7 +434,25 @@ class SettingsController extends Controller
             'about_journey_label' => $meta['about_journey_label'] ?? null,
             'about_journey_title' => $meta['about_journey_title'] ?? null,
             'about_timeline' => $meta['about_timeline'] ?? null,
+            'name_mr' => $meta['title_mr'] ?? $meta['school_name_mr'] ?? null,
+            ...$this->profileMrPayload($meta),
         ];
+    }
+
+    /** @param array<string, mixed> $meta
+     *  @return array<string, mixed>
+     */
+    private function profileMrPayload(array $meta): array
+    {
+        $out = [];
+        foreach (self::PROFILE_LOCALIZED_KEYS as $key) {
+            if ($key === 'title' || $key === 'school_name') {
+                continue;
+            }
+            $out["{$key}_mr"] = $meta["{$key}_mr"] ?? null;
+        }
+
+        return $out;
     }
 
     /** @return list<array<string, mixed>> */
@@ -469,6 +549,22 @@ class SettingsController extends Controller
                 $meta[$homeField] = $data[$homeField];
             }
         }
+
+        foreach (self::PROFILE_LOCALIZED_KEYS as $key) {
+            if ($key === 'title' || $key === 'school_name') {
+                continue;
+            }
+            $mrKey = "{$key}_mr";
+            if (array_key_exists($mrKey, $data)) {
+                $meta[$mrKey] = $data[$mrKey];
+            }
+        }
+
+        if (array_key_exists('name_mr', $data)) {
+            $meta['title_mr'] = $data['name_mr'];
+            $meta['school_name_mr'] = $data['name_mr'];
+        }
+
         if (array_key_exists('cover_image', $data)) {
             $meta['cover_image'] = $data['cover_image'];
         }
