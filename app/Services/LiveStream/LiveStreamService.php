@@ -282,7 +282,9 @@ class LiveStreamService
     /** @param list<int> $cameraIds */
     public function setActiveCameras(LiveStream $stream, array $cameraIds): LiveStream
     {
-        $layout = $this->resolvedLayoutMode($stream);
+        $enabledCount = $stream->cameras()->where('is_enabled', true)->count();
+        $max = max(1, min(4, $enabledCount > 0 ? $enabledCount : 4));
+
         $unique = [];
         foreach ($cameraIds as $id) {
             $id = (int) $id;
@@ -295,7 +297,13 @@ class LiveStreamService
             throw ValidationException::withMessages(['camera_ids' => 'Select at least one camera.']);
         }
 
-        $unique = array_slice($unique, 0, $layout);
+        if (count($unique) > $max) {
+            throw ValidationException::withMessages([
+                'camera_ids' => "You can activate at most {$max} camera(s).",
+            ]);
+        }
+
+        $unique = array_slice($unique, 0, $max);
         $cameras = $stream->cameras()->whereIn('id', $unique)->where('is_enabled', true)->get()->keyBy('id');
 
         $ordered = [];
@@ -308,7 +316,10 @@ class LiveStreamService
             $ordered[] = $id;
         }
 
+        $layout = count($ordered);
+
         $stream->update([
+            'layout_mode' => $layout,
             'active_camera_ids' => $ordered,
             'active_camera_id' => $ordered[0],
         ]);
