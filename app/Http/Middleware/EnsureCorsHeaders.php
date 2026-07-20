@@ -35,6 +35,13 @@ class EnsureCorsHeaders
             $allowed[] = $frontend;
         }
 
+        // SoftKatta production SPA hosts — always allow even if .env CORS list is incomplete.
+        foreach (['https://kinder.softkatta.in', 'https://www.kinder.softkatta.in'] as $hardcoded) {
+            if (! in_array($hardcoded, $allowed, true)) {
+                $allowed[] = $hardcoded;
+            }
+        }
+
         $originNorm = rtrim($origin, '/');
         if (! in_array($originNorm, $allowed, true)) {
             return $response;
