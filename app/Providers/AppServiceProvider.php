@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\SchoolTimezone;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +12,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(SchoolTimezone::class);
     }
 
     /**
@@ -19,6 +20,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        try {
+            $this->app->make(SchoolTimezone::class)->apply();
+        } catch (\Throwable) {
+            // DB may be unavailable during install / migrate
+        }
     }
 }

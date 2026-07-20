@@ -9,6 +9,7 @@ use App\Models\LiveStream;
 use App\Models\LiveStreamCamera;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\SchoolTimezone;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -22,7 +23,14 @@ class LiveStreamService
         private readonly LiveStreamNotificationService $notifications,
         private readonly LiveStreamUrlValidator $urlValidator,
         private readonly LiveKitService $liveKit,
+        private readonly SchoolTimezone $schoolTimezone,
     ) {}
+
+    private function timezone(): string
+    {
+        return $this->schoolTimezone->get();
+    }
+
     /** @return list<string> */
     public static function adminRoles(): array
     {
@@ -844,7 +852,7 @@ class LiveStreamService
             $time = strlen($time) === 5 ? $time.':00' : $time;
 
             try {
-                $payload['scheduled_start_at'] = Carbon::parse($meta['date'].' '.$time, config('app.timezone'));
+                $payload['scheduled_start_at'] = Carbon::parse($meta['date'].' '.$time, $this->timezone());
             } catch (\Throwable) {
                 // Ignore invalid CMS date/time values.
             }
@@ -871,7 +879,7 @@ class LiveStreamService
         }
 
         if ($stream->scheduled_start_at) {
-            $start = $stream->scheduled_start_at->copy()->timezone(config('app.timezone'));
+            $start = $stream->scheduled_start_at->copy()->timezone($this->timezone());
             $meta['date'] = $start->toDateString();
             $meta['time'] = $start->format('H:i');
         }
@@ -903,9 +911,9 @@ class LiveStreamService
 
     private function parseScheduleInput(string $value): ?Carbon
     {
-        $tz = config('app.timezone');
+        $tz = $this->timezone();
 
-        // datetime-local from admin UI — wall clock in app timezone (IST)
+        // datetime-local from admin UI — wall clock in school timezone
         if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value)) {
             return Carbon::createFromFormat('Y-m-d\TH:i', $value, $tz);
         }
@@ -919,7 +927,7 @@ class LiveStreamService
             return null;
         }
 
-        return $dateTime->copy()->timezone(config('app.timezone'))->format('Y-m-d\TH:i');
+        return $dateTime->copy()->timezone($this->timezone())->format('Y-m-d\TH:i');
     }
 
     private function toStaffCamera(LiveStreamCamera $camera): array
@@ -1114,7 +1122,7 @@ class LiveStreamService
             return null;
         }
 
-        $tz = config('app.timezone');
+        $tz = $this->timezone();
         $now = now($tz);
         $start = $stream->scheduled_start_at->copy()->timezone($tz);
 

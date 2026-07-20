@@ -11,6 +11,7 @@ use App\Models\Tenant;
 use App\Services\Notifications\IntegrationSettingsService;
 use App\Services\Notifications\SchoolNotificationService;
 use App\Services\Notifications\WhatsAppService;
+use App\Services\SchoolTimezone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -118,6 +119,7 @@ class SettingsController extends Controller
     public function __construct(
         private readonly IntegrationSettingsService $integrations,
         private readonly WhatsAppService $whatsapp,
+        private readonly SchoolTimezone $schoolTimezone,
     ) {}
 
     public function show(): JsonResponse
@@ -146,6 +148,7 @@ class SettingsController extends Controller
                 'profile.address' => ['sometimes', 'nullable', 'string', 'max:500'],
                 'profile.city' => ['sometimes', 'nullable', 'string', 'max:120'],
                 'profile.hours' => ['sometimes', 'nullable', 'string', 'max:120'],
+                'profile.timezone' => ['sometimes', 'nullable', 'timezone:all'],
                 'profile.facebook_url' => ['sometimes', 'nullable', 'string', 'max:500'],
                 'profile.instagram_url' => ['sometimes', 'nullable', 'string', 'max:500'],
                 'profile.youtube_url' => ['sometimes', 'nullable', 'string', 'max:500'],
@@ -452,6 +455,7 @@ class SettingsController extends Controller
             'address' => $meta['address'] ?? '',
             'city' => $meta['city'] ?? '',
             'hours' => $meta['hours'] ?? '',
+            'timezone' => $meta['timezone'] ?? $this->schoolTimezone->get(),
             'facebook_url' => $meta['facebook_url'] ?? '',
             'instagram_url' => $meta['instagram_url'] ?? '',
             'youtube_url' => $meta['youtube_url'] ?? '',
@@ -602,6 +606,10 @@ class SettingsController extends Controller
         if (array_key_exists('hours', $data)) {
             $meta['hours'] = $data['hours'];
         }
+        if (array_key_exists('timezone', $data)) {
+            $tz = trim((string) ($data['timezone'] ?? ''));
+            $meta['timezone'] = $tz !== '' ? $tz : null;
+        }
         if (array_key_exists('short_name', $data)) {
             $meta['short_name'] = $data['short_name'];
         }
@@ -673,6 +681,11 @@ class SettingsController extends Controller
                 'title' => $data['name'] ?? 'Little Stars Kindergarten',
                 'summary' => 'Nurturing young minds with joy and care.',
             ]);
+        }
+
+        if (array_key_exists('timezone', $data)) {
+            $this->schoolTimezone->forget();
+            $this->schoolTimezone->apply();
         }
     }
 
