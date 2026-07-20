@@ -166,6 +166,7 @@ class LiveStreamService
                 'camera_id' => $camera->id,
                 'camera_name' => $camera->name,
                 'camera_location' => $camera->location,
+                'audio_muted' => (bool) $camera->audio_muted,
             ];
         }
 
@@ -915,6 +916,7 @@ class LiveStreamService
             'name' => $camera->name,
             'location' => $camera->location,
             'stream_type' => $camera->stream_type,
+            'audio_muted' => (bool) $camera->audio_muted,
         ], $this->orderedActiveCameras($stream));
     }
 
