@@ -50,18 +50,6 @@ class InstallOrchestrator
                 }
                 $companyConfigured = $this->isCompanyApiConfigured();
 
-                // status() is license-exempt — force SoftKatta when Admin may have Activated/Suspended.
-                if (
-                    ! $decryptFailure
-                    && $installed
-                    && $hasToken
-                    && $companyConfigured
-                    && \SoftKatta\Licensing\Support\LicenseErrorCode::isRemotelyRecoverable($state?->last_error_code)
-                ) {
-                    $this->license->verify(true);
-                    $state = \SoftKatta\Licensing\Models\LicenseState::query()->first();
-                }
-
                 $hardBlocked = \SoftKatta\Licensing\Support\LicenseErrorCode::isHardFailure($state?->last_error_code);
                 // Local install_token alone is not enough — SoftKatta Product Integration credentials must exist.
                 $hasLicense = $hasToken && ! $hardBlocked && $companyConfigured && ! $decryptFailure;
@@ -79,7 +67,25 @@ class InstallOrchestrator
                         // ignore
                     }
                 }
-            }, attempts: 3, sleepMs: 120);
+            }, attempts: 8, sleepMs: 250);
+
+            // SoftKatta verify outside DB retry — network/API failures must not look like MySQL outage.
+            if (
+                ! $decryptFailure
+                && $installed
+                && $hasToken
+                && $companyConfigured
+                && \SoftKatta\Licensing\Support\LicenseErrorCode::isRemotelyRecoverable($state?->last_error_code)
+            ) {
+                try {
+                    $this->license->verify(true);
+                    $state = \SoftKatta\Licensing\Models\LicenseState::query()->first();
+                    $hardBlocked = \SoftKatta\Licensing\Support\LicenseErrorCode::isHardFailure($state?->last_error_code);
+                    $hasLicense = $hasToken && ! $hardBlocked && $companyConfigured && ! $decryptFailure;
+                } catch (\Throwable) {
+                    // Leave last DB-backed state; do not flip database_unavailable.
+                }
+            }
         } catch (\Illuminate\Contracts\Encryption\DecryptException) {
             $installed = File::exists(storage_path('app/installed'));
             $state = null;
