@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use SoftKatta\Licensing\Services\LicenseService;
+use SoftKatta\Licensing\Support\DatabaseConnectivity;
 use SoftKatta\Licensing\Support\LicenseErrorCode;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -31,7 +32,11 @@ class EnsureInstalled
         }
 
         try {
-            $installed = $this->license->isInstalled();
+            $installed = DatabaseConnectivity::retry(
+                fn () => $this->license->isInstalled(),
+                attempts: 3,
+                sleepMs: 120,
+            );
         } catch (Throwable $e) {
             // Already installed but DB credentials broken — never send users back to /install.
             if (File::exists(storage_path('app/installed'))) {

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\File;
 use PDO;
 use RuntimeException;
 use SoftKatta\Licensing\Contracts\CreatesAdminUser;
+use SoftKatta\Licensing\Support\DatabaseConnectivity;
 
 class InstallOrchestrator
 {
@@ -29,47 +30,56 @@ class InstallOrchestrator
         $hasToken = false;
 
         try {
-            $installed = $this->license->isInstalled();
-            $state = \SoftKatta\Licensing\Models\LicenseState::query()->first();
-            try {
-                $hasToken = filled($state?->install_token);
-            } catch (\Illuminate\Contracts\Encryption\DecryptException) {
-                // APP_KEY rotated / tokens unreadable — not a DB outage; send restore UI.
-                $decryptFailure = true;
-                $hasToken = false;
-                $installed = File::exists(storage_path('app/installed')) || $installed;
-            }
-            $companyConfigured = $this->isCompanyApiConfigured();
-
-            // status() is license-exempt — force SoftKatta when Admin may have Activated/Suspended.
-            if (
-                ! $decryptFailure
-                && $installed
-                && $hasToken
-                && $companyConfigured
-                && \SoftKatta\Licensing\Support\LicenseErrorCode::isRemotelyRecoverable($state?->last_error_code)
-            ) {
-                $this->license->verify(true);
+            DatabaseConnectivity::retry(function () use (
+                &$installed,
+                &$state,
+                &$hasToken,
+                &$decryptFailure,
+                &$companyConfigured,
+                &$hasLicense,
+            ): void {
+                $installed = $this->license->isInstalled();
                 $state = \SoftKatta\Licensing\Models\LicenseState::query()->first();
-            }
-
-            $hardBlocked = \SoftKatta\Licensing\Support\LicenseErrorCode::isHardFailure($state?->last_error_code);
-            // Local install_token alone is not enough — SoftKatta Product Integration credentials must exist.
-            $hasLicense = $hasToken && ! $hardBlocked && $companyConfigured && ! $decryptFailure;
-            if ($installed && $hasToken && ! $companyConfigured) {
-                $state?->forceFill([
-                    'last_error_code' => \SoftKatta\Licensing\Support\LicenseErrorCode::COMPANY_API_NOT_CONFIGURED,
-                ])->save();
-            }
-            if ($decryptFailure) {
                 try {
-                    $state?->forceFill([
-                        'last_error_code' => \SoftKatta\Licensing\Support\LicenseErrorCode::INVALID_INSTALL_TOKEN,
-                    ])->save();
-                } catch (\Throwable) {
-                    // ignore
+                    $hasToken = filled($state?->install_token);
+                } catch (\Illuminate\Contracts\Encryption\DecryptException) {
+                    // APP_KEY rotated / tokens unreadable — not a DB outage; send restore UI.
+                    $decryptFailure = true;
+                    $hasToken = false;
+                    $installed = File::exists(storage_path('app/installed')) || $installed;
                 }
-            }
+                $companyConfigured = $this->isCompanyApiConfigured();
+
+                // status() is license-exempt — force SoftKatta when Admin may have Activated/Suspended.
+                if (
+                    ! $decryptFailure
+                    && $installed
+                    && $hasToken
+                    && $companyConfigured
+                    && \SoftKatta\Licensing\Support\LicenseErrorCode::isRemotelyRecoverable($state?->last_error_code)
+                ) {
+                    $this->license->verify(true);
+                    $state = \SoftKatta\Licensing\Models\LicenseState::query()->first();
+                }
+
+                $hardBlocked = \SoftKatta\Licensing\Support\LicenseErrorCode::isHardFailure($state?->last_error_code);
+                // Local install_token alone is not enough — SoftKatta Product Integration credentials must exist.
+                $hasLicense = $hasToken && ! $hardBlocked && $companyConfigured && ! $decryptFailure;
+                if ($installed && $hasToken && ! $companyConfigured) {
+                    $state?->forceFill([
+                        'last_error_code' => \SoftKatta\Licensing\Support\LicenseErrorCode::COMPANY_API_NOT_CONFIGURED,
+                    ])->save();
+                }
+                if ($decryptFailure) {
+                    try {
+                        $state?->forceFill([
+                            'last_error_code' => \SoftKatta\Licensing\Support\LicenseErrorCode::INVALID_INSTALL_TOKEN,
+                        ])->save();
+                    } catch (\Throwable) {
+                        // ignore
+                    }
+                }
+            }, attempts: 3, sleepMs: 120);
         } catch (\Illuminate\Contracts\Encryption\DecryptException) {
             $installed = File::exists(storage_path('app/installed'));
             $state = null;
@@ -78,7 +88,7 @@ class InstallOrchestrator
             $databaseUnavailable = false;
             $companyConfigured = $this->isCompanyApiConfigured();
         } catch (\Throwable) {
-            // DB unavailable: lock file means install already finished — never reopen the wizard.
+            // DB unavailable after retries: lock file means install already finished — never reopen the wizard.
             $installed = File::exists(storage_path('app/installed'));
             $state = null;
             $hasLicense = false;
