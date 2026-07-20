@@ -123,9 +123,10 @@ class EnsureLicenseValid
 
         $force = $request->is('api/v1/auth/login')
             || $request->is('api/v1/license/verify')
-            || (bool) $request->bearerToken()
             || $request->is('api/v1/auth/*')
             || $isPublicGet;
+        // Do not force SoftKatta on every Bearer request — coalesce/interval cache applies
+        // so Settings saves are not flaky under SoftKatta 429/latency.
 
         $needsCheck = $force
             || $request->isMethod('post')

@@ -306,6 +306,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/erp/school', [SettingsController::class, 'update']);
             // Newest SPA: POST /tenant/profile (hcdn blocks PUT /erp/school with text/plain 403).
             Route::get('/tenant/profile', [SettingsController::class, 'show']);
+            Route::put('/tenant/profile', [SettingsController::class, 'update']);
             Route::post('/tenant/profile', [SettingsController::class, 'update']);
             Route::post('/settings/test-integration', [SettingsController::class, 'testIntegration']);
             Route::post('/school-config/test-integration', [SettingsController::class, 'testIntegration']);

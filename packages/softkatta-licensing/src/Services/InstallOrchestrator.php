@@ -21,16 +21,30 @@ class InstallOrchestrator
         $secret = (string) config('softkatta.api_secret');
 
         $databaseUnavailable = false;
+        $decryptFailure = false;
+        $installed = false;
+        $hasLicense = false;
+        $state = null;
+        $companyConfigured = false;
+        $hasToken = false;
 
         try {
             $installed = $this->license->isInstalled();
             $state = \SoftKatta\Licensing\Models\LicenseState::query()->first();
-            $hasToken = filled($state?->install_token);
+            try {
+                $hasToken = filled($state?->install_token);
+            } catch (\Illuminate\Contracts\Encryption\DecryptException) {
+                // APP_KEY rotated / tokens unreadable — not a DB outage; send restore UI.
+                $decryptFailure = true;
+                $hasToken = false;
+                $installed = File::exists(storage_path('app/installed')) || $installed;
+            }
             $companyConfigured = $this->isCompanyApiConfigured();
 
             // status() is license-exempt — force SoftKatta when Admin may have Activated/Suspended.
             if (
-                $installed
+                ! $decryptFailure
+                && $installed
                 && $hasToken
                 && $companyConfigured
                 && \SoftKatta\Licensing\Support\LicenseErrorCode::isRemotelyRecoverable($state?->last_error_code)
@@ -41,12 +55,28 @@ class InstallOrchestrator
 
             $hardBlocked = \SoftKatta\Licensing\Support\LicenseErrorCode::isHardFailure($state?->last_error_code);
             // Local install_token alone is not enough — SoftKatta Product Integration credentials must exist.
-            $hasLicense = $hasToken && ! $hardBlocked && $companyConfigured;
+            $hasLicense = $hasToken && ! $hardBlocked && $companyConfigured && ! $decryptFailure;
             if ($installed && $hasToken && ! $companyConfigured) {
                 $state?->forceFill([
                     'last_error_code' => \SoftKatta\Licensing\Support\LicenseErrorCode::COMPANY_API_NOT_CONFIGURED,
                 ])->save();
             }
+            if ($decryptFailure) {
+                try {
+                    $state?->forceFill([
+                        'last_error_code' => \SoftKatta\Licensing\Support\LicenseErrorCode::INVALID_INSTALL_TOKEN,
+                    ])->save();
+                } catch (\Throwable) {
+                    // ignore
+                }
+            }
+        } catch (\Illuminate\Contracts\Encryption\DecryptException) {
+            $installed = File::exists(storage_path('app/installed'));
+            $state = null;
+            $hasLicense = false;
+            $decryptFailure = true;
+            $databaseUnavailable = false;
+            $companyConfigured = $this->isCompanyApiConfigured();
         } catch (\Throwable) {
             // DB unavailable: lock file means install already finished — never reopen the wizard.
             $installed = File::exists(storage_path('app/installed'));
@@ -56,6 +86,15 @@ class InstallOrchestrator
             $companyConfigured = false;
         }
 
+        $wizardResumeStep = null;
+        if (! $installed && ! $databaseUnavailable) {
+            if ($hasToken || $decryptFailure) {
+                $wizardResumeStep = 7;
+            } elseif ($companyConfigured) {
+                $wizardResumeStep = 4;
+            }
+        }
+
         return [
             'installed' => $installed,
             'product_slug' => $this->resolveProductSlug(),
@@ -63,12 +102,16 @@ class InstallOrchestrator
             'domain' => $this->resolvePublicDomain(),
             'fingerprint' => $this->fingerprint->generate(),
             'has_license' => $hasLicense,
+            'has_install_token' => $hasToken,
+            'wizard_resume_step' => $wizardResumeStep,
             'needs_reactivation' => $installed && ! $hasLicense,
-            'last_error_code' => $databaseUnavailable
-                ? 'DATABASE_UNAVAILABLE'
-                : (($installed && ! ($companyConfigured ?? $this->isCompanyApiConfigured()))
-                    ? \SoftKatta\Licensing\Support\LicenseErrorCode::COMPANY_API_NOT_CONFIGURED
-                    : $state?->last_error_code),
+            'last_error_code' => $decryptFailure
+                ? \SoftKatta\Licensing\Support\LicenseErrorCode::INVALID_INSTALL_TOKEN
+                : ($databaseUnavailable
+                    ? 'DATABASE_UNAVAILABLE'
+                    : (($installed && ! ($companyConfigured ?? $this->isCompanyApiConfigured()))
+                        ? \SoftKatta\Licensing\Support\LicenseErrorCode::COMPANY_API_NOT_CONFIGURED
+                        : $state?->last_error_code)),
             'database_unavailable' => $databaseUnavailable,
             'bound_domain' => $state?->bound_domain,
             'company_api_configured' => $companyConfigured ?? $this->isCompanyApiConfigured(),
@@ -180,7 +223,9 @@ class InstallOrchestrator
             ],
             'env_writable' => [
                 'label' => '.env writable',
-                'ok' => is_writable(base_path('.env')) || is_writable(base_path()),
+                'ok' => File::exists(base_path('.env'))
+                    ? is_writable(base_path('.env'))
+                    : is_writable(base_path()),
                 'value' => base_path('.env'),
             ],
             'app_key' => [
@@ -403,11 +448,17 @@ class InstallOrchestrator
             throw new RuntimeException('Product slug is required.');
         }
         if ($appUrl === '' || ! filter_var($appUrl, FILTER_VALIDATE_URL)) {
-            throw new RuntimeException('A valid application URL (APP_URL) is required for domain binding.');
+            throw new RuntimeException('A valid public site URL (FRONTEND_URL) is required for domain binding.');
         }
 
-        $this->writeEnv([
-            'APP_URL' => $appUrl,
+        $boundHost = parse_url($appUrl, PHP_URL_HOST);
+        $boundHost = is_string($boundHost) ? strtolower($boundHost) : '';
+
+        // Never overwrite APP_URL with the SPA origin — API host must stay on kinder-api (or local API).
+        // Wizard app_url is the public site used for SoftKatta domain binding.
+        $envWrites = [
+            'FRONTEND_URL' => $appUrl,
+            'SOFTKATTA_FRONTEND_URL' => $appUrl,
             'SOFTKATTA_LICENSING_ENABLED' => 'true',
             'SOFTKATTA_COMPANY_API_URL' => $companyApiUrl,
             'SOFTKATTA_PUBLIC_API_KEY' => $publicApiKey,
@@ -419,11 +470,18 @@ class InstallOrchestrator
             'SOFTKATTA_VERIFY_INTERVAL_MINUTES' => (string) $verifyIntervalMinutes,
             'SOFTKATTA_TIMESTAMP_SKEW' => (string) ((int) config('softkatta.timestamp_skew_seconds', 300)),
             'SOFTKATTA_REQUIRE_HTTPS' => $requireHttps ? 'true' : 'false',
-        ]);
+        ];
+        if ($boundHost !== '') {
+            $envWrites['SOFTKATTA_BOUND_DOMAIN'] = $boundHost;
+        }
+
+        $this->writeEnv($envWrites);
 
         // Apply immediately in this process so a same-request activate would work.
         config([
-            'app.url' => $appUrl,
+            'app.frontend_url' => $appUrl,
+            'softkatta.frontend_url' => $appUrl,
+            'softkatta.bound_domain' => $boundHost !== '' ? $boundHost : config('softkatta.bound_domain'),
             'softkatta.enabled' => true,
             'softkatta.company_api_url' => $companyApiUrl,
             'softkatta.public_api_key' => $publicApiKey,

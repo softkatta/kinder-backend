@@ -53,7 +53,7 @@ class InstallController extends Controller
             'api_secret' => ['nullable', 'string', 'max:500'],
             'product_slug' => ['required', 'string', 'max:100'],
             'product_version' => ['nullable', 'string', 'max:50'],
-            'app_url' => ['required', 'url', 'max:500'],
+            'app_url' => ['required', 'url', 'max:500'], // public SPA URL → FRONTEND_URL / SoftKatta binding
             'require_https' => ['nullable', 'boolean'],
             'offline_grace_days' => ['nullable', 'integer', 'min:1', 'max:90'],
             'verify_interval_hours' => ['nullable', 'integer', 'min:0', 'max:168'],
