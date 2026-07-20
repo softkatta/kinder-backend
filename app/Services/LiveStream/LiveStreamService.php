@@ -174,6 +174,11 @@ class LiveStreamService
             return $viewer;
         }
 
+        // Withhold embeds while paused so clients cannot keep decoding YouTube/LiveKit under a UI overlay.
+        if ($stream->status === LiveStream::STATUS_PAUSED) {
+            return $viewer;
+        }
+
         return [
             ...$viewer,
             'playback' => $playbacks[0],
