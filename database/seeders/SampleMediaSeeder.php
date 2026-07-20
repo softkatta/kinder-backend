@@ -100,6 +100,7 @@ class SampleMediaSeeder extends Seeder
             $meta['home_why_image'] = $path('home-why.jpg');
             $meta['about_page_image'] = $path('home-about.jpg');
             $meta['about_page_image_accent'] = $path('gallery/outdoor-1.jpg');
+            $meta['principal_image'] = $path('avatars/principal.jpg');
             $meta['page_about_image'] = $path('pages/about.jpg');
             $meta['page_programs_image'] = $path('pages/programs.jpg');
             $meta['page_facilities_image'] = $path('pages/facilities.jpg');

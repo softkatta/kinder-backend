@@ -76,6 +76,8 @@ class CmsSeeder extends Seeder
                 'hours' => 'Mon – Sat: 8:00 AM – 4:00 PM',
                 'short_name' => 'Little Stars',
                 'school_name' => 'Little Stars Kindergarten',
+                'meta_title' => 'Little Stars Kindergarten | Play-Based Early Learning',
+                'meta_description' => 'Nurturing young minds with joy and care. Safe campus, certified teachers, and play-based learning for Nursery, LKG & UKG.',
                 'established_year' => '2015',
                 'vision' => 'Every child discovers joy in learning through play, care, and community.',
                 'mission' => 'We nurture curious, confident learners in a safe, inclusive kindergarten environment.',
