@@ -1114,7 +1114,11 @@ class LiveStreamService
             return null;
         }
 
-        return max(0, (int) now()->diffInSeconds($stream->scheduled_start_at, false));
+        $tz = config('app.timezone');
+        $now = now($tz);
+        $start = $stream->scheduled_start_at->copy()->timezone($tz);
+
+        return max(0, (int) $now->diffInSeconds($start, false));
     }
 
     private function extractYoutubeId(string $url): ?string
