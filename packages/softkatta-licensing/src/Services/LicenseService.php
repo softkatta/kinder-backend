@@ -547,6 +547,47 @@ class LicenseService
         $code = $result['error_code'] ?? LicenseErrorCode::INVALID_LICENSE;
         $message = $result['message'] ?? 'License verification failed.';
 
+        // Concurrent public GETs can finish SoftKatta reject AFTER Restore already succeeded.
+        // Only ignore token-rotation races — never ignore Admin Suspend / Revoke / Expire.
+        $adminRemoteBlocks = [
+            LicenseErrorCode::SUSPENDED_LICENSE,
+            LicenseErrorCode::REVOKED_LICENSE,
+            LicenseErrorCode::EXPIRED_SUBSCRIPTION,
+            LicenseErrorCode::PRODUCT_DISABLED,
+            LicenseErrorCode::DOMAIN_NOT_AUTHORIZED,
+            LicenseErrorCode::TENANT_DOMAINS_REQUIRED,
+            LicenseErrorCode::UNSUPPORTED_VERSION,
+            LicenseErrorCode::SERVER_VERIFICATION_FAILED,
+        ];
+
+        if (! in_array($code, $adminRemoteBlocks, true)) {
+            try {
+                $state->refresh();
+            } catch (\Throwable) {
+                // continue with in-memory state
+            }
+
+            // Stale verify used an old install_token while Restore minted a new one.
+            if (
+                ($code === LicenseErrorCode::INVALID_INSTALL_TOKEN || $code === LicenseErrorCode::INVALID_LICENSE)
+                && $state->last_error_code === null
+                && filled($state->install_token)
+                && $state->updated_at
+                && $state->updated_at->gt(now()->subSeconds(60))
+            ) {
+                return [
+                    'ok' => true,
+                    'from_cache' => true,
+                    'message' => 'Ignoring stale install-token failure after a recent license update.',
+                    'data' => [
+                        'modules' => $state->modules_cache ?? [],
+                        'limits' => $state->limits_cache ?? [],
+                        'bound_domain' => $state->bound_domain,
+                    ],
+                ];
+            }
+        }
+
         $payload = [
             'last_error_code' => $code,
         ];
