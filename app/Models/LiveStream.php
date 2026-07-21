@@ -116,6 +116,11 @@ class LiveStream extends Model
         return $this->hasMany(LiveStreamCamera::class)->orderBy('display_order');
     }
 
+    public function viewerSessions(): HasMany
+    {
+        return $this->hasMany(LiveStreamViewerSession::class);
+    }
+
     public function activeCamera(): BelongsTo
     {
         return $this->belongsTo(LiveStreamCamera::class, 'active_camera_id');

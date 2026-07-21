@@ -108,6 +108,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/live/active', [LiveStreamController::class, 'publicActive']);
         Route::get('/live/upcoming', [LiveStreamController::class, 'publicUpcoming']);
         Route::get('/live/{liveStream}/watch', [LiveStreamController::class, 'publicWatch']);
+        Route::post('/live/{liveStream}/viewer-heartbeat', [LiveStreamController::class, 'publicViewerHeartbeat']);
         Route::post('/live/{liveStream}/webrtc-token', [LiveStreamController::class, 'publicWebrtcToken']);
     });
 
@@ -419,6 +420,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/active/viewer', [LiveStreamController::class, 'viewerActive']);
             Route::get('/upcoming/viewer', [LiveStreamController::class, 'viewerUpcoming']);
             Route::get('/{liveStream}/watch', [LiveStreamController::class, 'watch']);
+            Route::post('/{liveStream}/viewer-heartbeat', [LiveStreamController::class, 'viewerHeartbeat']);
         });
 
         // WebRTC tokens — staff publish; staff + viewers subscribe (authorization in controller)

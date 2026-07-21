@@ -71,6 +71,11 @@ class LiveStreamController extends Controller
 
     public function show(LiveStream $liveStream): JsonResponse
     {
+        if (in_array($liveStream->status, [LiveStream::STATUS_LIVE, LiveStream::STATUS_PAUSED], true)) {
+            $this->streams->syncViewerCount($liveStream);
+            $liveStream->refresh();
+        }
+
         return ApiResponse::success($this->streams->toStaffPayload($liveStream));
     }
 
@@ -375,6 +380,36 @@ class LiveStreamController extends Controller
         }
 
         return ApiResponse::success($this->streams->toWatchPayload($liveStream));
+    }
+
+    public function publicViewerHeartbeat(Request $request, LiveStream $liveStream): JsonResponse
+    {
+        if ($liveStream->visibility === LiveStream::VISIBILITY_PARENTS_ONLY) {
+            return ApiResponse::error('Login required to watch this stream', 403);
+        }
+
+        $data = $request->validate([
+            'viewer_key' => ['required', 'string', 'min:16', 'max:64', 'regex:/^[a-zA-Z0-9_-]+$/'],
+        ]);
+
+        return ApiResponse::success(
+            $this->streams->heartbeatViewer($liveStream, $data['viewer_key']),
+        );
+    }
+
+    public function viewerHeartbeat(Request $request, LiveStream $liveStream): JsonResponse
+    {
+        $data = $request->validate([
+            'viewer_key' => ['required', 'string', 'min:16', 'max:64', 'regex:/^[a-zA-Z0-9_-]+$/'],
+        ]);
+
+        return ApiResponse::success(
+            $this->streams->heartbeatViewer(
+                $liveStream,
+                $data['viewer_key'],
+                $request->user()?->id,
+            ),
+        );
     }
 
     public function publisherEvents(): JsonResponse

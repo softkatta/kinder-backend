@@ -7,12 +7,14 @@ use App\Models\CmsItem;
 use App\Models\IdCard;
 use App\Models\LiveStream;
 use App\Models\LiveStreamCamera;
+use App\Models\LiveStreamViewerSession;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\SchoolTimezone;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -237,6 +239,78 @@ class LiveStreamService
                 'action' => $action,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Parent/public watch page presence. Updates viewer_count and broadcasts when it changes.
+     *
+     * @return array{viewer_count: int}
+     */
+    public function heartbeatViewer(LiveStream $stream, string $viewerKey, ?int $userId = null): array
+    {
+        $viewerKey = Str::lower(trim($viewerKey));
+        if ($viewerKey === '' || strlen($viewerKey) < 16 || strlen($viewerKey) > 64) {
+            throw ValidationException::withMessages([
+                'viewer_key' => 'Invalid viewer key.',
+            ]);
+        }
+
+        if (! in_array($stream->status, [LiveStream::STATUS_LIVE, LiveStream::STATUS_PAUSED], true)) {
+            $this->clearViewerSessions($stream);
+
+            return ['viewer_count' => 0];
+        }
+
+        $now = now();
+
+        LiveStreamViewerSession::query()->updateOrCreate(
+            [
+                'live_stream_id' => $stream->id,
+                'viewer_key' => $viewerKey,
+            ],
+            [
+                'user_id' => $userId,
+                'last_seen_at' => $now,
+            ],
+        );
+
+        $count = $this->syncViewerCount($stream);
+
+        return ['viewer_count' => $count];
+    }
+
+    public function syncViewerCount(LiveStream $stream, bool $broadcast = true): int
+    {
+        $cutoff = now()->subSeconds(LiveStreamViewerSession::TTL_SECONDS);
+
+        LiveStreamViewerSession::query()
+            ->where('live_stream_id', $stream->id)
+            ->where('last_seen_at', '<', $cutoff)
+            ->delete();
+
+        $count = LiveStreamViewerSession::query()
+            ->where('live_stream_id', $stream->id)
+            ->where('last_seen_at', '>=', $cutoff)
+            ->count();
+
+        $previous = (int) $stream->viewer_count;
+        if ($previous !== $count) {
+            $stream->update(['viewer_count' => $count]);
+            if ($broadcast) {
+                $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'viewer_count');
+            }
+        }
+
+        return $count;
+    }
+
+    public function clearViewerSessions(LiveStream $stream): void
+    {
+        LiveStreamViewerSession::query()->where('live_stream_id', $stream->id)->delete();
+
+        if ((int) $stream->viewer_count !== 0) {
+            $stream->update(['viewer_count' => 0]);
         }
     }
 
@@ -490,11 +564,16 @@ class LiveStreamService
         }
 
         $volume = max(0, min(100, $volume));
-        $camera->update([
-            'audio_volume' => $volume,
+        $payload = [
             // Moving the slider above 0 unmutes; 0 keeps mute semantics for parents.
-            'audio_muted' => $volume === 0 ? true : false,
-        ]);
+            'audio_muted' => $volume === 0,
+        ];
+        // Avoid 500 if production has not run the audio_volume migration yet.
+        if (Schema::hasColumn('live_stream_cameras', 'audio_volume')) {
+            $payload['audio_volume'] = $volume;
+        }
+
+        $camera->update($payload);
         $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_audio_updated', $camera->id);
 
         return $camera->fresh(['publisher.roles']);
@@ -806,7 +885,10 @@ class LiveStreamService
             'started_at' => now(),
             'paused_at' => null,
             'stopped_at' => null,
+            'viewer_count' => 0,
         ]);
+
+        $this->clearViewerSessions($stream->fresh());
 
         $fresh = $stream->fresh(['activeCamera', 'cameras']);
         $this->syncMobileCameraStatuses($fresh);
@@ -898,7 +980,10 @@ class LiveStreamService
         $stream->update([
             'status' => LiveStream::STATUS_STOPPED,
             'stopped_at' => now(),
+            'viewer_count' => 0,
         ]);
+
+        $this->clearViewerSessions($stream->fresh());
 
         $stream->cameras()
             ->whereNotNull('publisher_user_id')
