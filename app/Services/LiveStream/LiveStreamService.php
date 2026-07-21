@@ -658,7 +658,7 @@ class LiveStreamService
                 ->where('status', LiveStream::STATUS_SCHEDULED)
                 ->where('auto_start', true)
                 ->whereNotNull('scheduled_start_at')
-                ->where('scheduled_start_at', '<=', $now->copy()->timezone(config('app.timezone')))
+                ->where('scheduled_start_at', '<=', $now)
                 ->orderBy('scheduled_start_at')
                 ->each(function (LiveStream $stream) {
                     try {
@@ -690,7 +690,7 @@ class LiveStreamService
                 ->whereIn('status', [LiveStream::STATUS_LIVE, LiveStream::STATUS_PAUSED])
                 ->where('auto_end', true)
                 ->whereNotNull('scheduled_end_at')
-                ->where('scheduled_end_at', '<=', $now->copy()->timezone(config('app.timezone')))
+                ->where('scheduled_end_at', '<=', $now)
                 ->each(function (LiveStream $stream) {
                     try {
                         $this->stopLive($stream);
@@ -1375,8 +1375,8 @@ class LiveStreamService
     }
 
     /**
-     * Public/parent viewers must not receive playback until scheduled start
-     * when countdown is enabled — prevents video before “Starts In” hits zero.
+     * Public/parent may watch once broadcasting AND (countdown off OR start time reached).
+     * Admin “Start Now” before the clock still waits for the scheduled start.
      */
     private function isViewerScheduleOpen(LiveStream $stream): bool
     {
@@ -1388,7 +1388,8 @@ class LiveStreamService
         $now = now($tz);
         $start = $stream->scheduled_start_at->copy()->timezone($tz);
 
-        return $start->lte($now);
+        // 1s grace so clients at 00:00:00 are not blocked by clock skew.
+        return $start->lte($now->copy()->addSecond());
     }
 
     private function extractYoutubeId(string $url): ?string
