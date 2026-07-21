@@ -256,6 +256,10 @@ class LiveStreamService
             ]);
         }
 
+        if (! Schema::hasTable('live_stream_viewer_sessions')) {
+            return ['viewer_count' => (int) $stream->viewer_count];
+        }
+
         if (! in_array($stream->status, [LiveStream::STATUS_LIVE, LiveStream::STATUS_PAUSED], true)) {
             $this->clearViewerSessions($stream);
 
@@ -282,6 +286,10 @@ class LiveStreamService
 
     public function syncViewerCount(LiveStream $stream, bool $broadcast = true): int
     {
+        if (! Schema::hasTable('live_stream_viewer_sessions')) {
+            return (int) $stream->viewer_count;
+        }
+
         $cutoff = now()->subSeconds(LiveStreamViewerSession::TTL_SECONDS);
 
         LiveStreamViewerSession::query()
@@ -307,7 +315,9 @@ class LiveStreamService
 
     public function clearViewerSessions(LiveStream $stream): void
     {
-        LiveStreamViewerSession::query()->where('live_stream_id', $stream->id)->delete();
+        if (Schema::hasTable('live_stream_viewer_sessions')) {
+            LiveStreamViewerSession::query()->where('live_stream_id', $stream->id)->delete();
+        }
 
         if ((int) $stream->viewer_count !== 0) {
             $stream->update(['viewer_count' => 0]);
@@ -396,6 +406,7 @@ class LiveStreamService
         }
 
         if (count($unique) > $max) {
+            $isPip = $currentMode === LiveStream::LAYOUT_PIP;
             throw ValidationException::withMessages([
                 'camera_ids' => $isPip
                     ? 'PiP layout uses at most 2 cameras (main + mini).'
@@ -525,8 +536,8 @@ class LiveStreamService
             'last_seen_at' => now(),
         ]);
 
-        if ((int) $stream->active_camera_id === (int) $camera->id) {
-            $next = $stream->cameras()
+        $nextPrimary = (int) $stream->active_camera_id === (int) $camera->id
+            ? ($stream->cameras()
                 ->where('id', '!=', $camera->id)
                 ->where('is_enabled', true)
                 ->whereIn('connection_status', [
@@ -535,10 +546,10 @@ class LiveStreamService
                     LiveStreamCamera::STATUS_LIVE,
                 ])
                 ->orderBy('display_order')
-                ->first();
+                ->first()?->id)
+            : $stream->active_camera_id;
 
-            $stream->update(['active_camera_id' => $next?->id]);
-        }
+        $this->setActiveCamerasAfterRemoval($stream, (int) $camera->id, $nextPrimary ? (int) $nextPrimary : null);
 
         $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_disconnected', $camera->id);
 
@@ -551,7 +562,16 @@ class LiveStreamService
             throw ValidationException::withMessages(['camera' => 'Camera not found on this stream.']);
         }
 
-        $camera->update(['audio_muted' => $muted]);
+        $payload = ['audio_muted' => $muted];
+        // Unmute with volume 0 would stay silent for parents — restore a usable level.
+        if (! $muted && Schema::hasColumn('live_stream_cameras', 'audio_volume')) {
+            $currentVolume = (int) ($camera->audio_volume ?? 100);
+            if ($currentVolume <= 0) {
+                $payload['audio_volume'] = 100;
+            }
+        }
+
+        $camera->update($payload);
         $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_audio_updated', $camera->id);
 
         return $camera->fresh(['publisher.roles']);
