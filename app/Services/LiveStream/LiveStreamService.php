@@ -532,6 +532,8 @@ class LiveStreamService
             'mode' => LiveStream::MODE_SCHEDULED,
             'status' => LiveStream::STATUS_SCHEDULED,
             'notify_before_minutes' => $data['notify_before_minutes'] ?? [60, 30],
+            'auto_start' => array_key_exists('auto_start', $data) ? (bool) $data['auto_start'] : true,
+            'auto_end' => array_key_exists('auto_end', $data) ? (bool) $data['auto_end'] : ($stream->auto_end ?? true),
         ]);
 
         if ($stream->enable_reminder && ! $this->notifications->wasSent($stream, 'scheduled')) {
@@ -644,49 +646,72 @@ class LiveStreamService
 
     public function processAutoStartEnd(): void
     {
-        if (Cache::get('live_streams:auto_process_lock')) {
+        if (! Cache::add('live_streams:auto_process_lock', true, 30)) {
             return;
         }
-        Cache::put('live_streams:auto_process_lock', true, 45);
 
-        $now = now();
+        try {
+            $now = now($this->timezone());
 
-        LiveStream::query()
-            ->where('status', LiveStream::STATUS_SCHEDULED)
-            ->where('auto_start', true)
-            ->whereNotNull('scheduled_start_at')
-            ->where('scheduled_start_at', '<=', $now)
-            ->each(function (LiveStream $stream) {
-                $fresh = $stream->fresh(['cameras', 'activeCamera']);
-                $this->startLive($fresh);
-                if (! $this->notifications->wasSent($fresh, 'started')) {
-                    $this->notifications->notifyParents(
-                        $fresh,
-                        LiveStreamNotificationService::TYPE_STARTED,
-                        'Live started now!',
-                        "{$fresh->title} is live. Tap Watch Live in the parent portal.",
-                    );
-                    $this->notifications->markSent($fresh, 'started');
-                }
-            });
+            LiveStream::query()
+                ->where('status', LiveStream::STATUS_SCHEDULED)
+                ->where('auto_start', true)
+                ->whereNotNull('scheduled_start_at')
+                ->where('scheduled_start_at', '<=', $now->copy()->timezone(config('app.timezone')))
+                ->orderBy('scheduled_start_at')
+                ->each(function (LiveStream $stream) {
+                    try {
+                        $fresh = $stream->fresh(['cameras', 'activeCamera']);
+                        if (! $fresh || $fresh->status !== LiveStream::STATUS_SCHEDULED) {
+                            return;
+                        }
 
-        LiveStream::query()
-            ->whereIn('status', [LiveStream::STATUS_LIVE, LiveStream::STATUS_PAUSED])
-            ->where('auto_end', true)
-            ->whereNotNull('scheduled_end_at')
-            ->where('scheduled_end_at', '<=', $now)
-            ->each(function (LiveStream $stream) {
-                $this->stopLive($stream);
-                if (! $this->notifications->wasSent($stream, 'ended')) {
-                    $this->notifications->notifyParents(
-                        $stream->fresh(),
-                        LiveStreamNotificationService::TYPE_ENDED,
-                        'Live event ended',
-                        "{$stream->title} has ended. Thank you for watching!",
-                    );
-                    $this->notifications->markSent($stream, 'ended');
-                }
-            });
+                        $this->startLive($fresh);
+
+                        if (! $this->notifications->wasSent($fresh, 'started')) {
+                            $this->notifications->notifyParents(
+                                $fresh->fresh(),
+                                LiveStreamNotificationService::TYPE_STARTED,
+                                'Live started now!',
+                                "{$fresh->title} is live. Tap Watch Live in the parent portal.",
+                            );
+                            $this->notifications->markSent($fresh, 'started');
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning('Live stream auto-start failed', [
+                            'stream_id' => $stream->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                });
+
+            LiveStream::query()
+                ->whereIn('status', [LiveStream::STATUS_LIVE, LiveStream::STATUS_PAUSED])
+                ->where('auto_end', true)
+                ->whereNotNull('scheduled_end_at')
+                ->where('scheduled_end_at', '<=', $now->copy()->timezone(config('app.timezone')))
+                ->each(function (LiveStream $stream) {
+                    try {
+                        $this->stopLive($stream);
+                        if (! $this->notifications->wasSent($stream, 'ended')) {
+                            $this->notifications->notifyParents(
+                                $stream->fresh(),
+                                LiveStreamNotificationService::TYPE_ENDED,
+                                'Live event ended',
+                                "{$stream->title} has ended. Thank you for watching!",
+                            );
+                            $this->notifications->markSent($stream, 'ended');
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning('Live stream auto-end failed', [
+                            'stream_id' => $stream->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                });
+        } finally {
+            Cache::forget('live_streams:auto_process_lock');
+        }
     }
 
     public function processReminderNotifications(): void
