@@ -118,7 +118,8 @@ class LiveStreamService
         $watchable = $stream->isBroadcasting()
             && $active
             && $active->is_enabled
-            && $activeIds !== [];
+            && $activeIds !== []
+            && $this->isViewerScheduleOpen($stream);
 
         return [
             'id' => $stream->id,
@@ -1355,15 +1356,39 @@ class LiveStreamService
 
     private function countdownSeconds(LiveStream $stream): ?int
     {
-        if (! $stream->enable_countdown || ! $stream->scheduled_start_at || ! $stream->isUpcoming()) {
+        if (! $stream->enable_countdown || ! $stream->scheduled_start_at) {
             return null;
         }
 
         $tz = $this->timezone();
         $now = now($tz);
         $start = $stream->scheduled_start_at->copy()->timezone($tz);
+        $left = (int) $now->diffInSeconds($start, false);
 
-        return max(0, (int) $now->diffInSeconds($start, false));
+        // Keep serving countdown while wall-clock start is still in the future,
+        // even if staff clicked Start Now early (viewers must wait).
+        if ($left > 0) {
+            return $left;
+        }
+
+        return $stream->isUpcoming() ? 0 : null;
+    }
+
+    /**
+     * Public/parent viewers must not receive playback until scheduled start
+     * when countdown is enabled — prevents video before “Starts In” hits zero.
+     */
+    private function isViewerScheduleOpen(LiveStream $stream): bool
+    {
+        if (! $stream->enable_countdown || ! $stream->scheduled_start_at) {
+            return true;
+        }
+
+        $tz = $this->timezone();
+        $now = now($tz);
+        $start = $stream->scheduled_start_at->copy()->timezone($tz);
+
+        return $start->lte($now);
     }
 
     private function extractYoutubeId(string $url): ?string
