@@ -73,12 +73,17 @@ class TemplateDesignerSeeder extends Seeder
             mkdir($dstDir, 0755, true);
         }
 
+        $copied = [];
         foreach (config('template_designer.default_backgrounds', []) as $path) {
             $filename = basename($path);
+            if (isset($copied[$filename])) {
+                continue;
+            }
             $src = $srcDir.'/'.$filename;
             $dst = $dstDir.'/'.$filename;
             if (is_file($src)) {
                 copy($src, $dst);
+                $copied[$filename] = true;
             }
         }
     }
@@ -305,8 +310,8 @@ class TemplateDesignerSeeder extends Seeder
                 'name' => 'Default Graduation Certificate',
                 'message' => 'completion_message',
                 'extras' => [
-                    $this->textField('promotion_to_class', 95, 130, 50, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('session', 175, 130, 45, 7, ['fontSize' => 9, 'textAlign' => 'center']),
+                    $this->textField('promotion_to_class', 70, 142, 55, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('session', 170, 142, 55, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
                 ],
                 'with_photo' => true,
             ],
@@ -314,59 +319,59 @@ class TemplateDesignerSeeder extends Seeder
                 'name' => 'Default Achievement Certificate',
                 'message' => 'achievement_description',
                 'extras' => [
-                    $this->textField('award_name', 95, 130, 55, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('event_name', 175, 130, 55, 7, ['fontSize' => 9, 'textAlign' => 'center']),
+                    $this->textField('award_name', 70, 142, 70, 7, ['fontSize' => 9, 'bold' => true, 'textAlign' => 'center', 'color' => '#b8860b']),
+                    $this->textField('event_name', 155, 142, 70, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
                 ],
             ],
             'participation_certificate' => [
                 'name' => 'Default Participation Certificate',
                 'message' => 'participation_message',
                 'extras' => [
-                    $this->textField('activity_name', 95, 130, 55, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('event_name', 175, 130, 55, 7, ['fontSize' => 9, 'textAlign' => 'center']),
+                    $this->textField('activity_name', 70, 142, 70, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('event_name', 155, 142, 70, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
                 ],
             ],
             'winner_certificate' => [
                 'name' => 'Default Winner Certificate',
                 'message' => 'prize',
                 'extras' => [
-                    $this->textField('position', 75, 130, 40, 7, ['fontSize' => 10, 'bold' => true, 'textAlign' => 'center', 'color' => '#b8860b']),
-                    $this->textField('competition_name', 125, 130, 70, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('event_date', 210, 130, 45, 7, ['fontSize' => 9, 'textAlign' => 'center']),
+                    $this->textField('position', 55, 142, 40, 7, ['fontSize' => 11, 'bold' => true, 'textAlign' => 'center', 'color' => '#b8860b']),
+                    $this->textField('competition_name', 105, 142, 90, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('event_date', 205, 142, 45, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
                 ],
             ],
             'best_attendance_certificate' => [
                 'name' => 'Default Best Attendance Certificate',
                 'message' => 'award_message',
                 'extras' => [
-                    $this->textField('attendance_percentage', 85, 130, 40, 8, ['fontSize' => 12, 'bold' => true, 'textAlign' => 'center', 'color' => '#1e3a5f']),
-                    $this->textField('days_present', 135, 130, 35, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('total_working_days', 185, 130, 40, 7, ['fontSize' => 9, 'textAlign' => 'center']),
+                    $this->textField('attendance_percentage', 70, 141, 45, 8, ['fontSize' => 12, 'bold' => true, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('days_present', 130, 142, 40, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('total_working_days', 185, 142, 45, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
                 ],
             ],
             'good_behaviour_certificate' => [
                 'name' => 'Default Good Behaviour Certificate',
                 'message' => 'appreciation_message',
                 'extras' => [
-                    $this->textField('behaviour_rating', 95, 130, 45, 7, ['fontSize' => 10, 'bold' => true, 'textAlign' => 'center']),
-                    $this->textField('teacher_remarks', 35, 128, 225, 12, ['fontSize' => 8, 'textAlign' => 'center', 'color' => '#475569']),
+                    $this->textField('behaviour_rating', 70, 142, 55, 7, ['fontSize' => 10, 'bold' => true, 'textAlign' => 'center', 'color' => '#b8860b']),
+                    $this->textField('teacher_remarks', 130, 140, 100, 10, ['fontSize' => 8, 'textAlign' => 'center', 'color' => '#475569']),
                 ],
             ],
             'creativity_award_certificate' => [
                 'name' => 'Default Creativity Award Certificate',
                 'message' => 'award_title',
                 'extras' => [
-                    $this->textField('activity', 75, 130, 50, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('competition', 135, 130, 55, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('teacher_name', 200, 130, 55, 7, ['fontSize' => 9, 'textAlign' => 'center']),
+                    $this->textField('activity', 55, 142, 55, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('competition', 120, 142, 70, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('teacher_name', 200, 142, 50, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
                 ],
             ],
             'birthday_certificate' => [
                 'name' => 'Default Birthday Certificate',
                 'message' => 'birthday_wishes',
                 'extras' => [
-                    $this->textField('birth_date', 95, 130, 50, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('age', 175, 130, 35, 7, ['fontSize' => 9, 'textAlign' => 'center']),
+                    $this->textField('birth_date', 85, 142, 55, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('age', 165, 142, 45, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
                 ],
                 'with_photo' => true,
             ],
@@ -374,23 +379,20 @@ class TemplateDesignerSeeder extends Seeder
                 'name' => 'Default Bonafide Certificate',
                 'message' => 'purpose_text',
                 'extras' => [
-                    $this->textField('school_name', 35, 38, 225, 10, ['fontSize' => 14, 'bold' => true, 'textAlign' => 'center', 'color' => '#1e3a5f']),
-                    $this->textField('admission_number', 40, 128, 45, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('class', 95, 128, 35, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('section', 140, 128, 25, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('father_name', 175, 128, 55, 7, ['fontSize' => 8, 'textAlign' => 'center']),
-                    $this->textField('purpose', 35, 136, 225, 8, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#475569']),
+                    $this->textField('admission_number', 55, 142, 50, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('section', 120, 142, 30, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('father_name', 165, 142, 75, 7, ['fontSize' => 8, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('purpose', 50, 150, 197, 8, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#475569']),
                 ],
             ],
             'leaving_certificate' => [
                 'name' => 'Default Leaving Certificate',
                 'message' => 'reason_for_leaving',
                 'extras' => [
-                    $this->textField('gr_number', 40, 128, 45, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('leaving_date', 95, 128, 45, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('conduct', 150, 128, 35, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('result', 195, 128, 35, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-                    $this->textField('last_attendance_date', 240, 128, 40, 7, ['fontSize' => 8, 'textAlign' => 'center']),
+                    $this->textField('gr_number', 45, 142, 45, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('leaving_date', 100, 142, 45, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('conduct', 155, 142, 35, 7, ['fontSize' => 9, 'textAlign' => 'center', 'color' => '#1e3a5f']),
+                    $this->textField('result', 200, 142, 40, 7, ['fontSize' => 9, 'bold' => true, 'textAlign' => 'center', 'color' => '#1e3a5f']),
                 ],
             ],
         ];
@@ -413,7 +415,7 @@ class TemplateDesignerSeeder extends Seeder
                 [
                     'category_id' => $category->id,
                     'name' => $def['name'],
-                    'description' => 'Pre-designed certificate with default background and field layout.',
+                    'description' => 'Celebration background (navy banner + gold seal) with fields aligned to the artwork.',
                     'paper_size' => 'a4_landscape',
                     'orientation' => 'landscape',
                     'background_image' => $bgPath,
@@ -506,29 +508,79 @@ class TemplateDesignerSeeder extends Seeder
         );
     }
 
-    /** @param list<array<string, mixed>> $extras */
+    /**
+     * Field layout for celebration-certificate.png (A4 landscape).
+     * Zones: white title on navy banner → name above gold divider → body below →
+     * signature above printed PRINCIPAL SIGNATURE / DATE lines → seal in laurel.
+     *
+     * @param  list<array<string, mixed>>  $extras
+     * @return list<array<string, mixed>>
+     */
     private function landscapeCertificateObjects(string $messageKey, array $extras = [], bool $withPhoto = false): array
     {
         $objects = [
-            $this->textField('certificate_number', 12, 8, 55, 7, ['fontSize' => 8, 'color' => '#64748b']),
-            $this->imageField('school_logo', 12, 8, 28, 18),
-            $this->imageField('qr_code', 258, 8, 22, 22),
-            $this->textField('category_name', 48, 38, 200, 8, ['fontSize' => 13, 'bold' => true, 'textAlign' => 'center', 'color' => '#1e3a5f']),
-            $this->textField('certificate_title', 48, 48, 200, 12, ['fontSize' => 22, 'bold' => true, 'textAlign' => 'center', 'color' => '#b8860b']),
-            $this->textField('certify_intro', 48, 62, 200, 8, ['fontSize' => 11, 'textAlign' => 'center', 'color' => '#1e3a5f']),
-            $this->textField('student_name', 48, 84, 200, 16, ['fontSize' => 24, 'bold' => true, 'textAlign' => 'center', 'color' => '#b8860b']),
-            $this->textField('roll_number_labeled', 48, 100, 200, 7, ['fontSize' => 11, 'textAlign' => 'center', 'color' => '#475569']),
-            $this->textField($messageKey, 32, 104, 232, 24, ['fontSize' => 10, 'textAlign' => 'center', 'color' => '#1e3a5f']),
-            $this->textField('class', 55, 130, 40, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-            $this->textField('academic_year', 125, 130, 50, 7, ['fontSize' => 9, 'textAlign' => 'center']),
-            $this->imageField('principal_signature', 22, 152, 48, 16),
-            $this->imageField('school_seal', 124, 148, 40, 40),
-            $this->textField('issue_date', 210, 168, 55, 8, ['fontSize' => 10, 'bold' => true, 'textAlign' => 'center']),
+            $this->textField('certificate_number', 18, 11, 52, 6, ['fontSize' => 7, 'color' => '#64748b']),
+            $this->imageField('school_logo', 18, 20, 22, 14),
+            // Title sits on the navy ribbon (white text).
+            $this->textField('certificate_title', 52, 51, 193, 12, [
+                'fontSize' => 17,
+                'bold' => true,
+                'textAlign' => 'center',
+                'color' => '#ffffff',
+            ]),
+            $this->textField('certify_intro', 55, 70, 187, 7, [
+                'fontSize' => 10,
+                'textAlign' => 'center',
+                'color' => '#1e3a5f',
+            ]),
+            $this->textField('student_name', 45, 82, 207, 14, [
+                'fontSize' => 22,
+                'bold' => true,
+                'textAlign' => 'center',
+                'color' => '#b8860b',
+            ]),
+            $this->textField('roll_number_labeled', 55, 96, 187, 6, [
+                'fontSize' => 9,
+                'textAlign' => 'center',
+                'color' => '#64748b',
+            ]),
+            // Body text below the printed gold divider.
+            $this->textField($messageKey, 48, 112, 201, 22, [
+                'fontSize' => 10,
+                'textAlign' => 'center',
+                'color' => '#1e3a5f',
+            ]),
+            $this->textField('class', 70, 134, 50, 6, [
+                'fontSize' => 9,
+                'textAlign' => 'center',
+                'color' => '#1e3a5f',
+            ]),
+            $this->textField('academic_year', 170, 134, 55, 6, [
+                'fontSize' => 9,
+                'textAlign' => 'center',
+                'color' => '#1e3a5f',
+            ]),
+            // Above printed PRINCIPAL SIGNATURE / DATE labels; seal in laurel wreath.
+            $this->imageField('principal_signature', 52, 156, 55, 14),
+            $this->textField('principal_name', 50, 170, 60, 6, [
+                'fontSize' => 8,
+                'textAlign' => 'center',
+                'color' => '#1e3a5f',
+            ]),
+            $this->imageField('school_seal', 132, 152, 30, 30),
+            $this->textField('issue_date', 198, 165, 55, 8, [
+                'fontSize' => 10,
+                'bold' => true,
+                'textAlign' => 'center',
+                'color' => '#1e3a5f',
+            ]),
+            // QR below the gold seal ribbons (right side), clear of decorations.
+            $this->imageField('qr_code', 252, 58, 18, 18),
         ];
 
         if ($withPhoto) {
             array_splice($objects, 3, 0, [
-                $this->imageField('student_photo', 248, 38, 32, 38),
+                $this->imageField('student_photo', 245, 78, 28, 34),
             ]);
         }
 
@@ -538,6 +590,12 @@ class TemplateDesignerSeeder extends Seeder
     private function patchCategoryNameOnTemplates(): void
     {
         Template::query()->with('category')->get()->each(function (Template $template) {
+            // Celebration artwork layout has title on the navy banner — do not inject category_name.
+            $bg = (string) ($template->background_image ?? '');
+            if (str_contains($bg, 'celebration-certificate')) {
+                return;
+            }
+
             $canvas = $template->canvas_json ?? [];
             $objects = $canvas['objects'] ?? [];
             $keys = array_column($objects, 'variableKey');
