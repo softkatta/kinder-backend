@@ -306,6 +306,7 @@ class LiveStreamController extends Controller
             'preview' => [
                 ...$this->streams->playbackConfig($liveStream, $camera),
                 'audio_muted' => (bool) $camera->audio_muted,
+                'audio_volume' => max(0, min(100, (int) ($camera->audio_volume ?? 100))),
             ],
         ]);
     }
@@ -445,6 +446,22 @@ class LiveStreamController extends Controller
         $camera = $this->streams->setCameraAudioMuted($liveStream, $camera, (bool) $data['muted']);
 
         return ApiResponse::success($this->streams->toStaffPayload($liveStream->fresh()), $data['muted'] ? 'Audio muted' : 'Audio unmuted');
+    }
+
+    public function volumeCamera(Request $request, LiveStream $liveStream, LiveStreamCamera $camera): JsonResponse
+    {
+        $this->assertCameraBelongsToStream($liveStream, $camera);
+
+        $data = $request->validate([
+            'volume' => ['required', 'integer', 'min:0', 'max:100'],
+        ]);
+
+        $this->streams->setCameraAudioVolume($liveStream, $camera, (int) $data['volume']);
+
+        return ApiResponse::success(
+            $this->streams->toStaffPayload($liveStream->fresh()),
+            'Camera volume updated',
+        );
     }
 
     public function livekitConfig(): JsonResponse

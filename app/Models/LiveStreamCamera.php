@@ -63,6 +63,7 @@ class LiveStreamCamera extends Model
         'battery_level',
         'signal_strength',
         'audio_muted',
+        'audio_volume',
         'joined_at',
         'last_seen_at',
     ];
@@ -72,6 +73,7 @@ class LiveStreamCamera extends Model
         return [
             'is_enabled' => 'boolean',
             'audio_muted' => 'boolean',
+            'audio_volume' => 'integer',
             'joined_at' => 'datetime',
             'last_seen_at' => 'datetime',
         ];

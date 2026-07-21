@@ -402,6 +402,7 @@ Route::prefix('v1')->group(function () {
             Route::patch('/{liveStream}/layout', [LiveStreamController::class, 'setLayout']);
             Route::get('/{liveStream}/cameras/{camera}/preview', [LiveStreamController::class, 'previewCamera']);
             Route::patch('/{liveStream}/cameras/{camera}/mute', [LiveStreamController::class, 'muteCamera']);
+            Route::patch('/{liveStream}/cameras/{camera}/volume', [LiveStreamController::class, 'volumeCamera']);
             Route::post('/{liveStream}/cameras/{camera}/disconnect', [LiveStreamController::class, 'disconnectCamera']);
             Route::get('/livekit/config', [LiveStreamController::class, 'livekitConfig']);
 

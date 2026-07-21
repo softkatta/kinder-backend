@@ -168,6 +168,7 @@ class LiveStreamService
                 'camera_name' => $camera->name,
                 'camera_location' => $camera->location,
                 'audio_muted' => (bool) $camera->audio_muted,
+                'audio_volume' => max(0, min(100, (int) ($camera->audio_volume ?? 100))),
             ];
         }
 
@@ -477,6 +478,23 @@ class LiveStreamService
         }
 
         $camera->update(['audio_muted' => $muted]);
+        $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_audio_updated', $camera->id);
+
+        return $camera->fresh(['publisher.roles']);
+    }
+
+    public function setCameraAudioVolume(LiveStream $stream, LiveStreamCamera $camera, int $volume): LiveStreamCamera
+    {
+        if ((int) $camera->live_stream_id !== (int) $stream->id) {
+            throw ValidationException::withMessages(['camera' => 'Camera not found on this stream.']);
+        }
+
+        $volume = max(0, min(100, $volume));
+        $camera->update([
+            'audio_volume' => $volume,
+            // Moving the slider above 0 unmutes; 0 keeps mute semantics for parents.
+            'audio_muted' => $volume === 0 ? true : false,
+        ]);
         $this->broadcastUpdate($stream->fresh(['activeCamera', 'cameras']), 'camera_audio_updated', $camera->id);
 
         return $camera->fresh(['publisher.roles']);
@@ -985,6 +1003,7 @@ class LiveStreamService
             'location' => $camera->location,
             'stream_type' => $camera->stream_type,
             'audio_muted' => (bool) $camera->audio_muted,
+            'audio_volume' => max(0, min(100, (int) ($camera->audio_volume ?? 100))),
         ], $this->orderedActiveCameras($stream));
     }
 
@@ -1219,6 +1238,7 @@ class LiveStreamService
             'battery_level' => $camera->battery_level,
             'signal_strength' => $camera->signal_strength,
             'audio_muted' => (bool) $camera->audio_muted,
+            'audio_volume' => max(0, min(100, (int) ($camera->audio_volume ?? 100))),
             'joined_at' => $camera->joined_at?->toIso8601String(),
             'last_seen_at' => $camera->last_seen_at?->toIso8601String(),
             'is_mobile_publisher' => $camera->isMobilePublisher(),
@@ -1237,6 +1257,7 @@ class LiveStreamService
             'connection_status_label' => $this->connectionStatusLabel($camera->connection_status ?? LiveStreamCamera::STATUS_OFFLINE),
             'device_name' => $camera->device_name,
             'audio_muted' => (bool) $camera->audio_muted,
+            'audio_volume' => max(0, min(100, (int) ($camera->audio_volume ?? 100))),
             'joined_at' => $camera->joined_at?->toIso8601String(),
         ];
     }
