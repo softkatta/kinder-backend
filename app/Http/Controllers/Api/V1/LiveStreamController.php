@@ -323,6 +323,10 @@ class LiveStreamController extends Controller
         $stream = $this->streams->findActiveForViewer(publicOnly: false);
 
         if ($stream) {
+            if ($stream->isBroadcasting() || $stream->status === LiveStream::STATUS_PAUSED) {
+                return ApiResponse::success($this->streams->toWatchPayload($stream));
+            }
+
             return ApiResponse::success($this->streams->toViewerPayload($stream));
         }
 
@@ -354,6 +358,11 @@ class LiveStreamController extends Controller
         $stream = $this->streams->findActiveForViewer(publicOnly: true);
 
         if ($stream) {
+            // One round-trip: include playbacks when watchable so the player can mount immediately.
+            if ($stream->isBroadcasting() || $stream->status === LiveStream::STATUS_PAUSED) {
+                return ApiResponse::success($this->streams->toWatchPayload($stream));
+            }
+
             return ApiResponse::success($this->streams->toViewerPayload($stream));
         }
 
