@@ -250,7 +250,7 @@ class LiveStreamService
         $ids = $this->resolvedActiveCameraIds($stream);
         $ids = array_values(array_filter($ids, fn (int $id) => $id !== (int) $camera->id));
         array_unshift($ids, (int) $camera->id);
-        $ids = array_slice($ids, 0, $layout);
+        $ids = array_slice($ids, 0, LiveStream::layoutPaneCount($layout));
 
         $stream->update([
             'active_camera_id' => $camera->id,
@@ -265,14 +265,27 @@ class LiveStreamService
     public function setLayoutMode(LiveStream $stream, int $layoutMode): LiveStream
     {
         $enabledCount = $stream->cameras()->where('is_enabled', true)->count();
-        $max = max(1, min(4, $enabledCount > 0 ? $enabledCount : 4));
-        $mode = max(1, min($max, $layoutMode));
+        $wantPip = $layoutMode === LiveStream::LAYOUT_PIP;
+
+        if ($wantPip) {
+            if ($enabledCount < 1) {
+                throw ValidationException::withMessages([
+                    'layout_mode' => 'Enable at least one camera before selecting PiP.',
+                ]);
+            }
+            $mode = LiveStream::LAYOUT_PIP;
+            $paneCount = LiveStream::layoutPaneCount($mode);
+        } else {
+            // Keep the admin-selected grid (1–4) even if fewer cameras are active yet.
+            $mode = max(1, min(4, $layoutMode));
+            $paneCount = $mode;
+        }
 
         $ids = $this->resolvedActiveCameraIds($stream);
         if ($ids === [] && $stream->active_camera_id) {
             $ids = [(int) $stream->active_camera_id];
         }
-        $ids = array_slice($ids, 0, $mode);
+        $ids = array_slice($ids, 0, $paneCount);
 
         $stream->update([
             'layout_mode' => $mode,
@@ -290,7 +303,10 @@ class LiveStreamService
     public function setActiveCameras(LiveStream $stream, array $cameraIds): LiveStream
     {
         $enabledCount = $stream->cameras()->where('is_enabled', true)->count();
-        $max = max(1, min(4, $enabledCount > 0 ? $enabledCount : 4));
+        $currentMode = LiveStream::normalizeLayoutMode((int) ($stream->layout_mode ?? 1));
+        // Layout mode is chosen by admin (1–4 / PiP). Activating cameras only fills slots.
+        $paneCap = LiveStream::layoutPaneCount($currentMode);
+        $max = min($paneCap, max(1, $enabledCount > 0 ? $enabledCount : $paneCap));
 
         $unique = [];
         foreach ($cameraIds as $id) {
@@ -306,7 +322,9 @@ class LiveStreamService
 
         if (count($unique) > $max) {
             throw ValidationException::withMessages([
-                'camera_ids' => "You can activate at most {$max} camera(s).",
+                'camera_ids' => $isPip
+                    ? 'PiP layout uses at most 2 cameras (main + mini).'
+                    : "This layout uses at most {$max} camera(s).",
             ]);
         }
 
@@ -323,10 +341,8 @@ class LiveStreamService
             $ordered[] = $id;
         }
 
-        $layout = count($ordered);
-
         $stream->update([
-            'layout_mode' => $layout,
+            'layout_mode' => $currentMode,
             'active_camera_ids' => $ordered,
             'active_camera_id' => $ordered[0],
         ]);
@@ -763,7 +779,7 @@ class LiveStreamService
         $ids = $this->resolvedActiveCameraIds($stream);
         $ids = array_values(array_filter($ids, fn (int $id) => $id !== (int) $activeId));
         array_unshift($ids, (int) $activeId);
-        $ids = array_slice($ids, 0, $layout);
+        $ids = array_slice($ids, 0, LiveStream::layoutPaneCount($layout));
 
         $stream->update([
             'status' => LiveStream::STATUS_LIVE,
@@ -941,9 +957,7 @@ class LiveStreamService
 
     public function resolvedLayoutMode(LiveStream $stream): int
     {
-        $mode = (int) ($stream->layout_mode ?? 1);
-
-        return max(1, min(4, $mode > 0 ? $mode : 1));
+        return LiveStream::normalizeLayoutMode((int) ($stream->layout_mode ?? 1));
     }
 
     /** @return list<LiveStreamCamera> */
@@ -986,7 +1000,7 @@ class LiveStreamService
         }
 
         $layout = $this->resolvedLayoutMode($stream);
-        $ids = array_slice($ids, 0, $layout);
+        $ids = array_slice($ids, 0, LiveStream::layoutPaneCount($layout));
 
         $stream->update([
             'active_camera_ids' => $ids,

@@ -163,7 +163,7 @@ class LiveStreamController extends Controller
             $liveStream->update([
                 'active_camera_id' => $camera->id,
                 'active_camera_ids' => [(int) $camera->id],
-                'layout_mode' => max(1, (int) ($liveStream->layout_mode ?? 1)),
+                'layout_mode' => \App\Models\LiveStream::normalizeLayoutMode((int) ($liveStream->layout_mode ?? 1)),
             ]);
         }
 
@@ -259,7 +259,7 @@ class LiveStreamController extends Controller
     public function setLayout(Request $request, LiveStream $liveStream): JsonResponse
     {
         $data = $request->validate([
-            'layout_mode' => ['required', 'integer', 'min:1', 'max:4'],
+            'layout_mode' => ['required', 'integer', 'min:1', 'max:5'],
         ]);
 
         $stream = $this->streams->setLayoutMode($liveStream, (int) $data['layout_mode']);
@@ -303,7 +303,10 @@ class LiveStreamController extends Controller
             'camera_id' => $camera->id,
             'name' => $camera->name,
             'stream_type' => $camera->stream_type,
-            'preview' => $this->streams->playbackConfig($liveStream, $camera),
+            'preview' => [
+                ...$this->streams->playbackConfig($liveStream, $camera),
+                'audio_muted' => (bool) $camera->audio_muted,
+            ],
         ]);
     }
 

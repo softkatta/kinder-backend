@@ -58,6 +58,26 @@ class LiveStream extends Model
         'cancelled_at',
     ];
 
+    /** Picture-in-picture: primary full + secondary mini (2 panes). */
+    public const LAYOUT_PIP = 5;
+
+    public static function normalizeLayoutMode(int $mode): int
+    {
+        if ($mode === self::LAYOUT_PIP) {
+            return self::LAYOUT_PIP;
+        }
+
+        return max(1, min(4, $mode > 0 ? $mode : 1));
+    }
+
+    /** How many camera feeds this layout shows. */
+    public static function layoutPaneCount(int $mode): int
+    {
+        $normalized = self::normalizeLayoutMode($mode);
+
+        return $normalized === self::LAYOUT_PIP ? 2 : $normalized;
+    }
+
     protected function casts(): array
     {
         return [
