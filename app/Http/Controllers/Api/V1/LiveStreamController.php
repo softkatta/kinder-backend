@@ -82,6 +82,8 @@ class LiveStreamController extends Controller
             'banner' => ['nullable', 'string', 'max:500'],
             'cms_item_id' => ['nullable', 'integer', 'exists:cms_items,id'],
             'event_date' => ['nullable', 'date'],
+            'scheduled_start_at' => ['nullable', 'date'],
+            'scheduled_end_at' => ['nullable', 'date', 'after:scheduled_start_at'],
             'stream_source' => ['nullable', 'string', 'max:30'],
             'enable_countdown' => ['sometimes', 'boolean'],
             'enable_reminder' => ['sometimes', 'boolean'],
