@@ -560,6 +560,29 @@ class LiveStreamService
                 unset($data['notify_before_minutes']);
             }
             $data = $this->normalizeScheduleDates($data);
+
+            // Allow admin to move draft/stopped/cancelled ↔ scheduled without going live.
+            if (array_key_exists('status', $data)) {
+                $next = $data['status'];
+                $editable = in_array($stream->status, [
+                    LiveStream::STATUS_DRAFT,
+                    LiveStream::STATUS_SCHEDULED,
+                    LiveStream::STATUS_STOPPED,
+                    LiveStream::STATUS_CANCELLED,
+                ], true);
+
+                if ($editable && $next === LiveStream::STATUS_DRAFT) {
+                    $data['status'] = LiveStream::STATUS_DRAFT;
+                    $data['mode'] = LiveStream::MODE_INSTANT;
+                    $data['cancelled_at'] = null;
+                } elseif ($editable && $next === LiveStream::STATUS_SCHEDULED) {
+                    // Scheduling with countdown requires the dedicated schedule endpoint.
+                    unset($data['status']);
+                } else {
+                    unset($data['status']);
+                }
+            }
+
             $stream->update($data);
         }
 
@@ -1040,6 +1063,8 @@ class LiveStreamService
 
             try {
                 $payload['scheduled_start_at'] = Carbon::parse($meta['date'].' '.$time, $this->timezone());
+                $payload['status'] = LiveStream::STATUS_SCHEDULED;
+                $payload['mode'] = LiveStream::MODE_SCHEDULED;
             } catch (\Throwable) {
                 // Ignore invalid CMS date/time values.
             }
