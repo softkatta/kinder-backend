@@ -9,6 +9,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\IdCard\IdCardService;
 use App\Services\Notifications\IntegrationSettingsService;
+use SoftKatta\Licensing\Services\LicenseService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,7 @@ class AdmissionOnboardingService
     public function __construct(
         private readonly IdCardService $idCards,
         private readonly IntegrationSettingsService $integrations,
+        private readonly LicenseService $license,
     ) {}
 
     /** @return array{student_id_card_id: int, parent_user_id: ?int, parent_created: bool, temp_password: ?string} */
@@ -33,6 +35,11 @@ class AdmissionOnboardingService
                 'temp_password' => null,
             ];
         }
+
+        $this->license->assertWithinLimit(
+            'max_students',
+            IdCard::query()->where('card_type', 'student')->count(),
+        );
 
         return DB::transaction(function () use ($admission) {
             $parent = is_array($admission->parent_info) ? $admission->parent_info : [];
@@ -51,6 +58,7 @@ class AdmissionOnboardingService
                 $parentUser = User::query()->where('email', $parentEmail)->first();
 
                 if (! $parentUser) {
+                    $this->license->assertWithinLimit('max_users', User::query()->count());
                     $tempPassword = Str::password(10);
                     $parentUser = User::create([
                         'tenant_id' => $tenant?->id,

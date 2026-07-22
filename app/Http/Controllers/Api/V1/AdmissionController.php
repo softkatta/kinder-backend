@@ -86,14 +86,18 @@ class AdmissionController extends Controller
 
     public function approve(Request $request, Admission $admission): JsonResponse
     {
+        try {
+            $provisioned = $this->onboarding->provisionFromAdmission($admission->fresh());
+        } catch (\RuntimeException $e) {
+            return ApiResponse::error($e->getMessage(), 403);
+        }
+
         $admission->update([
             'status' => 'approved',
             'remarks' => $request->input('remarks', $admission->remarks),
             'reviewed_by_user_id' => $request->user()?->id,
             'reviewed_at' => now(),
         ]);
-
-        $provisioned = $this->onboarding->provisionFromAdmission($admission->fresh());
 
         $this->audit->log(
             $request->user(),
