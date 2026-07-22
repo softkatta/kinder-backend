@@ -225,31 +225,31 @@ class PaymentController extends Controller
         ]);
 
         $settings = PaymentSetting::query()->first();
-        if (! ($settings?->enable_razorpay) || ! $settings->razorpay_key_id) {
-            return ApiResponse::error('Online payments are not enabled', 422);
+        if (! ($settings?->enable_razorpay) || ! $settings->razorpay_key_id || ! $settings->razorpay_webhook_secret) {
+            return ApiResponse::error('Online payments are not configured. Set Razorpay key id and secret in Settings.', 422);
         }
 
         $user = $request->user();
         $tenant = Tenant::query()->first();
         $amountPaise = (int) round($data['amount'] * 100);
-        $orderId = 'order_'.uniqid();
+        $secret = $settings->razorpay_webhook_secret;
 
-        $secret = $settings->razorpay_webhook_secret ?? null;
-        if ($secret) {
-            try {
-                $response = Http::withBasicAuth($settings->razorpay_key_id, $secret)
-                    ->post('https://api.razorpay.com/v1/orders', [
-                        'amount' => $amountPaise,
-                        'currency' => 'INR',
-                        'receipt' => 'fee_'.$user->id.'_'.time(),
-                    ]);
-                if ($response->successful()) {
-                    $orderId = $response->json('id') ?? $orderId;
-                }
-            } catch (\Throwable) {
-                // fall back to local order id for dev
-            }
+        try {
+            $response = Http::withBasicAuth($settings->razorpay_key_id, $secret)
+                ->post('https://api.razorpay.com/v1/orders', [
+                    'amount' => $amountPaise,
+                    'currency' => 'INR',
+                    'receipt' => 'fee_'.$user->id.'_'.time(),
+                ]);
+        } catch (\Throwable $e) {
+            return ApiResponse::error('Could not reach Razorpay. Try again later.', 502);
         }
+
+        if (! $response->successful() || ! $response->json('id')) {
+            return ApiResponse::error('Razorpay order creation failed. Check key id/secret.', 422);
+        }
+
+        $orderId = (string) $response->json('id');
 
         $payment = Payment::create([
             'tenant_id' => $tenant?->id,
@@ -276,7 +276,7 @@ class PaymentController extends Controller
         $data = $request->validate([
             'razorpay_order_id' => ['required', 'string'],
             'razorpay_payment_id' => ['required', 'string'],
-            'razorpay_signature' => ['nullable', 'string'],
+            'razorpay_signature' => ['required', 'string'],
             'payment_id' => ['nullable', 'integer'],
         ]);
 
@@ -290,16 +290,18 @@ class PaymentController extends Controller
         }
 
         $settings = PaymentSetting::query()->first();
-        $secret = $settings->razorpay_webhook_secret ?? null;
-        if ($secret && ! empty($data['razorpay_signature'])) {
-            $expected = hash_hmac(
-                'sha256',
-                $data['razorpay_order_id'].'|'.$data['razorpay_payment_id'],
-                $secret,
-            );
-            if (! hash_equals($expected, $data['razorpay_signature'])) {
-                return ApiResponse::error('Invalid payment signature', 422);
-            }
+        $secret = $settings?->razorpay_webhook_secret;
+        if (! $secret) {
+            return ApiResponse::error('Razorpay secret is not configured.', 422);
+        }
+
+        $expected = hash_hmac(
+            'sha256',
+            $data['razorpay_order_id'].'|'.$data['razorpay_payment_id'],
+            $secret,
+        );
+        if (! hash_equals($expected, $data['razorpay_signature'])) {
+            return ApiResponse::error('Invalid payment signature', 422);
         }
 
         $payment->update([
