@@ -164,7 +164,8 @@ class CompanyApiClient
         $json = $response->json() ?? [];
         $status = $response->status();
 
-        // SoftKatta Company routes are throttled. Parallel public GETs must not record 429 as INVALID_LICENSE.
+        // SoftKatta Company routes are throttled (60/min). Homepage public GETs all force
+        // verify — a 429 must use offline grace, not be recorded as INVALID_LICENSE.
         if ($status === 429 || $response->serverError()) {
             return [
                 'ok' => false,

@@ -123,10 +123,10 @@ class EnsureLicenseValid
 
         $force = $request->is('api/v1/auth/login')
             || $request->is('api/v1/license/verify')
+            || (bool) $request->bearerToken()
             || $request->is('api/v1/auth/*')
+            // Public GETs always hit SoftKatta so Admin Suspend/Activate is immediate.
             || $isPublicGet;
-        // Do not force SoftKatta on every Bearer request — coalesce/interval cache applies
-        // so Settings saves are not flaky under SoftKatta 429/latency.
 
         $needsCheck = $force
             || $request->isMethod('post')
@@ -147,6 +147,7 @@ class EnsureLicenseValid
             ], 403);
         }
 
+        // Auth + public marketing paths force SoftKatta (Admin status changes apply on next request).
         $result = $this->license->verify($force);
 
         if (! ($result['ok'] ?? false)) {

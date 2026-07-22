@@ -33,6 +33,7 @@ class ServerFingerprintService
             return strtolower($this->stripPort($bound));
         }
 
+        // Browser SPA origin (study-point / kinder) — preferred over API host.
         $originHost = $this->hostFromRequestOrigin();
         if ($originHost !== null && ! $this->isLoopbackHost($originHost)) {
             return strtolower($this->stripPort($originHost));
