@@ -52,6 +52,46 @@ class StudentFeePaymentService
         }
     }
 
+    /** Reverse a previously applied verified payment amount from student fees (newest first). */
+    public function reversePayment(Payment $payment): void
+    {
+        $card = $this->resolveStudentCard($payment);
+        if (! $card) {
+            return;
+        }
+
+        $remaining = (float) $payment->amount;
+        if ($remaining <= 0) {
+            return;
+        }
+
+        $fees = StudentFee::query()
+            ->where('id_card_id', $card->id)
+            ->where('paid_amount', '>', 0)
+            ->orderByDesc('due_date')
+            ->orderByDesc('id')
+            ->get();
+
+        foreach ($fees as $fee) {
+            if ($remaining <= 0) {
+                break;
+            }
+
+            $paid = (float) $fee->paid_amount;
+            if ($paid <= 0) {
+                continue;
+            }
+
+            $reverse = min($paid, $remaining);
+            $newPaid = $paid - $reverse;
+            $fee->update([
+                'paid_amount' => $newPaid,
+                'status' => $newPaid <= 0 ? 'pending' : ($newPaid < (float) $fee->amount ? 'partial' : 'paid'),
+            ]);
+            $remaining -= $reverse;
+        }
+    }
+
     public function resolveStudentCard(Payment $payment): ?IdCard
     {
         if ($payment->admission_number) {

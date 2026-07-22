@@ -10,7 +10,7 @@ class PaymentSetting extends Model
     protected $fillable = [
         'tenant_id', 'upi_id', 'account_name', 'account_number', 'ifsc_code', 'bank_name', 'branch',
         'upi_qr_path', 'enable_upi', 'enable_cash', 'enable_qr', 'enable_razorpay',
-        'razorpay_key_id', 'razorpay_webhook_secret', 'payment_note',
+        'razorpay_key_id', 'razorpay_key_secret', 'razorpay_webhook_secret', 'payment_note',
     ];
 
     protected function casts(): array

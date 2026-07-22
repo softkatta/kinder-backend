@@ -159,6 +159,7 @@ class PaymentController extends Controller
             'enable_qr' => ['sometimes', 'boolean'],
             'enable_razorpay' => ['sometimes', 'boolean'],
             'razorpay_key_id' => ['nullable', 'string', 'max:120'],
+            'razorpay_key_secret' => ['nullable', 'string', 'max:255'],
             'razorpay_webhook_secret' => ['nullable', 'string', 'max:255'],
             'payment_note' => ['nullable', 'string'],
         ]);
@@ -168,6 +169,14 @@ class PaymentController extends Controller
             ['tenant_id' => $tenant?->id],
             ['enable_upi' => true, 'enable_cash' => true, 'enable_qr' => true],
         );
+
+        if (empty($data['razorpay_key_secret'])) {
+            unset($data['razorpay_key_secret']);
+        }
+        if (empty($data['razorpay_webhook_secret'])) {
+            unset($data['razorpay_webhook_secret']);
+        }
+
         $settings->update($data);
 
         return ApiResponse::success($this->settingsPayload($settings->fresh()), 'Settings saved');
@@ -225,14 +234,14 @@ class PaymentController extends Controller
         ]);
 
         $settings = PaymentSetting::query()->first();
-        if (! ($settings?->enable_razorpay) || ! $settings->razorpay_key_id || ! $settings->razorpay_webhook_secret) {
-            return ApiResponse::error('Online payments are not configured. Set Razorpay key id and secret in Settings.', 422);
+        if (! ($settings?->enable_razorpay) || ! $settings->razorpay_key_id || ! $settings->razorpay_key_secret) {
+            return ApiResponse::error('Online payments are not configured. Set Razorpay key id and key secret in Settings.', 422);
         }
 
         $user = $request->user();
         $tenant = Tenant::query()->first();
         $amountPaise = (int) round($data['amount'] * 100);
-        $secret = $settings->razorpay_webhook_secret;
+        $secret = $settings->razorpay_key_secret;
 
         try {
             $response = Http::withBasicAuth($settings->razorpay_key_id, $secret)
@@ -290,9 +299,9 @@ class PaymentController extends Controller
         }
 
         $settings = PaymentSetting::query()->first();
-        $secret = $settings?->razorpay_webhook_secret;
+        $secret = $settings?->razorpay_key_secret;
         if (! $secret) {
-            return ApiResponse::error('Razorpay secret is not configured.', 422);
+            return ApiResponse::error('Razorpay key secret is not configured.', 422);
         }
 
         $expected = hash_hmac(
@@ -415,6 +424,8 @@ class PaymentController extends Controller
             'remarks' => $data['remarks'] ?? $payment->remarks,
         ]);
 
+        $this->feePayments->reversePayment($payment->fresh());
+
         return ApiResponse::success($this->toRow($payment->fresh()), 'Payment refunded');
     }
 
@@ -505,6 +516,8 @@ class PaymentController extends Controller
             'enable_qr' => $settings?->enable_qr ?? true,
             'enable_razorpay' => $settings?->enable_razorpay ?? false,
             'razorpay_key_id' => $settings?->razorpay_key_id,
+            'razorpay_key_secret_set' => filled($settings?->razorpay_key_secret),
+            'razorpay_webhook_secret_set' => filled($settings?->razorpay_webhook_secret),
             'payment_note' => $settings?->payment_note,
             'methods' => collect(['upi', 'cash', 'qr', 'razorpay'])
                 ->filter(fn ($m) => match ($m) {

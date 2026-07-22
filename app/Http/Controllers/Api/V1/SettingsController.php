@@ -253,6 +253,7 @@ class SettingsController extends Controller
                 'payments.enable_qr' => ['sometimes', 'boolean'],
                 'payments.enable_razorpay' => ['sometimes', 'boolean'],
                 'payments.razorpay_key_id' => ['nullable', 'string', 'max:120'],
+                'payments.razorpay_key_secret' => ['nullable', 'string', 'max:255'],
                 'payments.razorpay_webhook_secret' => ['nullable', 'string', 'max:255'],
                 'payments.payment_note' => ['nullable', 'string'],
                 'payments.enable_online_payments' => ['sometimes', 'boolean'],
@@ -568,7 +569,9 @@ class SettingsController extends Controller
         return [
             'enable_razorpay' => $settings?->enable_razorpay ?? false,
             'razorpay_key_id' => $settings?->razorpay_key_id,
+            'razorpay_key_secret_set' => filled($settings?->razorpay_key_secret),
             'razorpay_webhook_secret' => null,
+            'razorpay_webhook_secret_set' => filled($settings?->razorpay_webhook_secret),
             'enable_online_payments' => $settings?->enable_razorpay ?? false,
             'enable_cash' => $settings?->enable_cash ?? true,
             'enable_upi_manual' => $settings?->enable_upi ?? true,
@@ -744,6 +747,9 @@ class SettingsController extends Controller
 
         if (array_key_exists('razorpay_key_id', $data)) {
             $update['razorpay_key_id'] = $data['razorpay_key_id'];
+        }
+        if (array_key_exists('razorpay_key_secret', $data) && $data['razorpay_key_secret']) {
+            $update['razorpay_key_secret'] = $data['razorpay_key_secret'];
         }
         if (array_key_exists('razorpay_webhook_secret', $data) && $data['razorpay_webhook_secret']) {
             $update['razorpay_webhook_secret'] = $data['razorpay_webhook_secret'];
