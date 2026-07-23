@@ -29,6 +29,7 @@ class ExamDocumentService
 
     private function renderView(ExamResult $result, string $type): array
     {
+        $legacyBase = $this->buildLegacyDocumentData($result, $type);
         $template = $this->findTemplate($result, $type);
         if ($template) {
             $student = $this->findStudent($result);
@@ -36,9 +37,9 @@ class ExamDocumentService
             $data = $this->mergeExamResultData($data, $result, $type);
 
             return [
+                ...$legacyBase,
                 'type' => $type,
                 'render_mode' => 'template',
-                'student_name' => $result->student_name,
                 'paper_size' => $template->paper_size,
                 'html' => $this->renderer->renderHtml($template, $data, forPdf: false),
                 'css' => $this->renderer->css(forPdf: false),
