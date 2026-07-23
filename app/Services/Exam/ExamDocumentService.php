@@ -150,6 +150,7 @@ class ExamDocumentService
     {
         $result->load('exam.academicYear');
         $exam = $result->exam;
+        $student = $this->findStudent($result);
         $school = $this->idCardService->schoolProfile();
         $percentage = $exam->max_marks > 0
             ? round(($result->marks_obtained / $exam->max_marks) * 100, 1)
@@ -185,7 +186,21 @@ class ExamDocumentService
             'certificate_title' => $result->result_status === 'pass'
                 ? 'Certificate of Achievement'
                 : 'Participation Certificate',
+            'student_photo_url' => $this->photoUrl($student?->photo_path),
         ];
+    }
+
+    private function photoUrl(?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, 'data:')) {
+            return $path;
+        }
+
+        return asset('storage/'.ltrim($path, '/'));
     }
 
     private function gradeFromPercentage(float $pct): string

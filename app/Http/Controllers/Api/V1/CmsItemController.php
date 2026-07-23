@@ -20,7 +20,7 @@ class CmsItemController extends Controller
     ) {}
 
     private const TYPES = [
-        'program', 'facility', 'activity', 'event', 'blog', 'gallery',
+        'program', 'facility', 'activity', 'event', 'blog', 'gallery', 'video',
         'faq', 'job', 'page', 'banner', 'testimonial', 'school_profile', 'payment_info',
         'staff', 'curriculum', 'hero', 'notice',
     ];

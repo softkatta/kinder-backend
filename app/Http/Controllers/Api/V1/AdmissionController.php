@@ -35,7 +35,12 @@ class AdmissionController extends Controller
             'address_info' => ['nullable', 'array'],
             'address_info.address' => ['nullable', 'string', 'max:500'],
             'photo_path' => ['nullable', 'string', 'max:500'],
+            'photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
+
+        if ($request->hasFile('photo')) {
+            $data['photo_path'] = $request->file('photo')->store('admissions', 'public');
+        }
 
         $tenant = Tenant::query()->first();
         $parent = is_array($data['parent_info'] ?? null) ? $data['parent_info'] : [];

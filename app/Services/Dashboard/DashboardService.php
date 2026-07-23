@@ -308,6 +308,7 @@ class DashboardService
 
         return [
             'badges' => [
+                'students' => $studentTotal,
                 'admissions' => ContactInquiry::query()->whereIn('status', ['new', 'pending'])->count()
                     + Admission::query()->whereIn('status', ['pending', 'review'])->count(),
                 'payments' => Payment::query()->where('status', 'pending')->count(),

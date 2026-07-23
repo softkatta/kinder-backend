@@ -82,6 +82,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/events', [PublicContentController::class, 'events']);
         Route::get('/blog', [PublicContentController::class, 'blog']);
         Route::get('/gallery', [PublicContentController::class, 'gallery']);
+        Route::get('/videos', [PublicContentController::class, 'videos']);
         Route::get('/faqs', [PublicContentController::class, 'faqs']);
         Route::get('/jobs', [PublicContentController::class, 'jobs']);
         Route::get('/testimonials', [PublicContentController::class, 'testimonials']);

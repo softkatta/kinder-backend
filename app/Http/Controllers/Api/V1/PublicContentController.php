@@ -74,6 +74,11 @@ class PublicContentController extends Controller
         return ApiResponse::success($this->published('gallery', $this->locale($request)));
     }
 
+    public function videos(Request $request): JsonResponse
+    {
+        return ApiResponse::success($this->published('video', $this->locale($request)));
+    }
+
     public function faqs(Request $request): JsonResponse
     {
         return ApiResponse::success($this->published('faq', $this->locale($request)));

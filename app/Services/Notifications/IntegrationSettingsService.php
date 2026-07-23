@@ -254,6 +254,12 @@ class IntegrationSettingsService
 
     public function applyBroadcastConfig(?IntegrationSetting $settings = null): void
     {
+        // Tests must not connect to a real Reverb/Pusher service persisted in the
+        // integration settings table. phpunit configures the null broadcaster.
+        if (app()->environment('testing')) {
+            return;
+        }
+
         $settings ??= $this->get();
         if (! $settings->broadcast_enabled) {
             return;

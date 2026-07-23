@@ -9,9 +9,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('payment_settings', function (Blueprint $table) {
-            $table->string('razorpay_key_secret')->nullable()->after('razorpay_key_id');
-        });
+        if (! Schema::hasColumn('payment_settings', 'razorpay_key_secret')) {
+            Schema::table('payment_settings', function (Blueprint $table) {
+                $table->string('razorpay_key_secret')->nullable()->after('razorpay_key_id');
+            });
+        }
 
         // Prior installs stored the Key Secret in webhook_secret — copy once for continuity.
         if (Schema::hasColumn('payment_settings', 'razorpay_webhook_secret')) {
