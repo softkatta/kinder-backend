@@ -15,9 +15,12 @@ use App\Models\User;
 use App\Models\UserNotification;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use SoftKatta\Licensing\Services\LicenseService;
 
 class DashboardService
 {
+    public function __construct(private readonly LicenseService $license) {}
+
     /** @return array<string, mixed> */
     public function admin(): array
     {
@@ -57,6 +60,11 @@ class DashboardService
                 ['label' => 'Pending Enquiries', 'value' => $pendingInquiries, 'change' => 'Contact form'],
                 ['label' => 'Fee Collection', 'value' => '₹'.$this->formatAmount($verifiedTotal), 'change' => "{$collectionPct}% verified"],
             ],
+            // Counts are installation-wide because plan limits are shared by the school.
+            'plan_usage' => [
+                'users' => $this->planUsage('max_users', User::query()->count()),
+                'students' => $this->planUsage('max_students', $studentTotal),
+            ],
             'hero' => [
                 'collection_pct' => $collectionPct,
                 'attendance_pct' => $attendancePct,
@@ -79,6 +87,18 @@ class DashboardService
                 ['title' => 'School settings', 'meta' => 'Profile & integrations', 'link' => '/admin/settings'],
             ],
             'recent_activity' => $this->recentActivity(),
+        ];
+    }
+
+    /** @return array{limit: int|null, total: int, remaining: int|null} */
+    private function planUsage(string $limitKey, int $total): array
+    {
+        $limit = $this->license->limit($limitKey);
+
+        return [
+            'limit' => $limit,
+            'total' => $total,
+            'remaining' => $limit === null ? null : max(0, $limit - $total),
         ];
     }
 
