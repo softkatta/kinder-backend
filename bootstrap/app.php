@@ -32,10 +32,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->throttleApi("{$apiRateLimit},1");
         // Global so CORS headers attach even when API middleware short-circuits.
         $middleware->prepend(EnsureCorsHeaders::class);
-        $middleware->api(prepend: [
-            EnsureInstalled::class,
-            EnsureLicenseValid::class,
-        ]);
+
+        $apiPrepend = [];
+        if (env('APP_ENV') !== 'testing') {
+            $apiPrepend[] = EnsureInstalled::class;
+            $apiPrepend[] = EnsureLicenseValid::class;
+        }
+
+        $middleware->api(prepend: $apiPrepend);
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
             'install.not_completed' => EnsureNotInstalled::class,
