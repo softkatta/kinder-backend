@@ -148,6 +148,7 @@ Route::prefix('v1')->group(function () {
         // CMS CRUD (super admin)
         Route::middleware('role:super_admin')->group(function () {
             Route::post('/files/cms', [FileUploadController::class, 'uploadCms']);
+            Route::post('/files/cms-video', [FileUploadController::class, 'uploadCmsVideo']);
             Route::post('/files/upload', [FileUploadController::class, 'upload']);
             Route::post('/files/document', [FileUploadController::class, 'uploadDocument']);
             Route::post('/files/homework', [FileUploadController::class, 'uploadHomework']);
@@ -357,7 +358,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/id-cards/verify', [IdCardController::class, 'verify']);
         });
 
-        // Teacher / staff — mobile camera publisher (register before admin live-stream wildcard routes)
+        // Teacher / staff â€” mobile camera publisher (register before admin live-stream wildcard routes)
         Route::middleware('role:teacher,staff')->group(function () {
             Route::get('/teacher/live-events', [LiveStreamController::class, 'publisherEvents']);
         });
@@ -400,7 +401,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/{liveStream}/cancel', [LiveStreamController::class, 'cancel']);
         });
 
-        // Parent / student / guest — view-only live stream
+        // Parent / student / guest â€” view-only live stream
         Route::middleware('role:parent,student,guest')->prefix('live-streams')->group(function () {
             Route::get('/active/viewer', [LiveStreamController::class, 'viewerActive']);
             Route::get('/upcoming/viewer', [LiveStreamController::class, 'viewerUpcoming']);
@@ -408,7 +409,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/{liveStream}/viewer-heartbeat', [LiveStreamController::class, 'viewerHeartbeat']);
         });
 
-        // WebRTC tokens — staff publish; staff + viewers subscribe (authorization in controller)
+        // WebRTC tokens â€” staff publish; staff + viewers subscribe (authorization in controller)
         Route::middleware('role:super_admin,teacher,staff,parent,student,guest')
             ->post('/live-streams/{liveStream}/webrtc-token', [LiveStreamController::class, 'webrtcToken']);
 
@@ -417,7 +418,8 @@ Route::prefix('v1')->group(function () {
         });
     });
 
-    // Signed playback redirect — no raw stream URLs in parent API responses
+    // Signed playback redirect â€” no raw stream URLs in parent API responses
     Route::get('/live-streams/{liveStream}/playback', [LiveStreamController::class, 'playback'])
         ->name('live-stream.playback');
 });
+

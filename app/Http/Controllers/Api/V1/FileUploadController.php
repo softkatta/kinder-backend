@@ -18,6 +18,11 @@ class FileUploadController extends Controller
         return $this->storeFile($request, 'cms', ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], 5120);
     }
 
+    public function uploadCmsVideo(Request $request): JsonResponse
+    {
+        return $this->storeFile($request, 'cms/videos', ['video/mp4', 'video/webm', 'video/quicktime'], 102400);
+    }
+
     public function upload(Request $request): JsonResponse
     {
         return $this->storeFile($request, 'uploads', ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'], 10240);
@@ -131,6 +136,9 @@ class FileUploadController extends Controller
             'pdf' => 'application/pdf',
             'doc' => 'application/msword',
             'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'mp4' => 'video/mp4',
+            'webm' => 'video/webm',
+            'mov' => 'video/quicktime',
         ];
 
         if ($extension !== '' && isset($extensionToMime[$extension]) && in_array($extensionToMime[$extension], $mimes, true)) {
@@ -156,14 +164,14 @@ class FileUploadController extends Controller
             }
 
             throw ValidationException::withMessages([
-                'file' => ["No file received. Your PHP upload limit is {$uploadMax} — use a smaller image (under 2 MB) or restart the backend with: php -d upload_max_filesize=25M -d post_max_size=30M artisan serve --port=8010"],
+                'file' => ["No file received. Your PHP upload limit is {$uploadMax} â€” use a smaller image (under 2 MB) or restart the backend with: php -d upload_max_filesize=25M -d post_max_size=30M artisan serve --port=8010"],
             ]);
         }
 
         $file = $request->file('file');
         if (! $file->isValid()) {
             $message = match ($file->getError()) {
-                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => "File exceeds PHP upload limit ({$uploadMax}). The app will auto-compress — refresh the page and try again, or use a smaller PNG/JPEG.",
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => "File exceeds PHP upload limit ({$uploadMax}). The app will auto-compress â€” refresh the page and try again, or use a smaller PNG/JPEG.",
                 UPLOAD_ERR_PARTIAL => 'Upload was interrupted. Please try again.',
                 UPLOAD_ERR_NO_FILE => 'No file was uploaded.',
                 default => 'Upload failed. Please try a different image.',
@@ -193,3 +201,4 @@ class FileUploadController extends Controller
         };
     }
 }
+
