@@ -29,9 +29,6 @@ use App\Http\Controllers\Api\V1\SearchController;
 use App\Http\Controllers\Api\V1\SettingsController;
 use App\Http\Controllers\Api\V1\StudentFeeController;
 use App\Http\Controllers\Api\V1\StudentController;
-use App\Http\Controllers\Api\V1\TemplateDesigner\TemplateCategoryController;
-use App\Http\Controllers\Api\V1\TemplateDesigner\TemplateController;
-use App\Http\Controllers\Api\V1\TemplateDesigner\TemplateVariableController;
 use App\Http\Controllers\Api\V1\TransportRouteController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Models\IdCard;
@@ -226,19 +223,6 @@ Route::prefix('v1')->group(function () {
             Route::get('/exam-results/{examResult}/marksheet', [ExamController::class, 'marksheetView']);
             Route::get('/exam-results/{examResult}/certificate', [ExamController::class, 'certificateView']);
             Route::post('/exam-results/{examResult}/printed', [ExamController::class, 'markPrinted']);
-
-            Route::prefix('template-designer')->group(function () {
-                Route::get('/categories', [TemplateCategoryController::class, 'index']);
-                Route::get('/variables', [TemplateVariableController::class, 'index']);
-                Route::get('/variables/sample', [TemplateVariableController::class, 'sample']);
-                Route::get('/templates', [TemplateController::class, 'index']);
-                Route::post('/templates', [TemplateController::class, 'store']);
-                Route::get('/templates/{template}', [TemplateController::class, 'show']);
-                Route::put('/templates/{template}', [TemplateController::class, 'update']);
-                Route::delete('/templates/{template}', [TemplateController::class, 'destroy']);
-                Route::post('/templates/{template}/preview', [TemplateController::class, 'preview']);
-                Route::post('/templates/{template}/generate', [TemplateController::class, 'generate']);
-            });
 
             // Guest management
             Route::get('/guests', [GuestController::class, 'index']);
